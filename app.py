@@ -328,6 +328,7 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List
     period: 'season' (full season), '2weeks' (last 14 days), '1week' (last 7 days)
     Returns top 200 players with avg FPS, total FPS, and usage over the period.
     """
+    # Attempt primary NBA API; if it fails (common on Render), fall back to empty list with a note.
     try:
         df = LeagueGameLog(
             league_id='00',
@@ -338,8 +339,9 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List
             date_to_nullable='',
         ).get_data_frames()[0]
     except Exception as e:
-        print(f"Error fetching league game log: {e}")
-        return []
+        # Primary source unreachable
+        print(f"Primary NBA API failed for player rankings: {e}")
+        return []  # No reliable alternative available
 
     if df.empty:
         return []
@@ -564,60 +566,104 @@ def box_score(game_id):
 
 @app.route('/api/scoreboard')
 def scoreboard():
-    """Get today's games"""
+    """Get today's games - uses ESPN public API (stats.nba.com blocks cloud IPs)"""
     date_str = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    # ESPN expects YYYYMMDD format (no dashes)
+    espn_date = date_str.replace('-', '')
+
+    # stats.nba.com consistently times out on Render/cloud infrastructure.
+    # Use ESPN public API as primary source - it's fast, reliable, and no auth needed.
     try:
-        dfs = ScoreboardV3(game_date=date_str).get_data_frames()
-        if not dfs or len(dfs) < 3:
-            return jsonify({'date': date_str, 'games': []})
-
-        games_df = dfs[1]   # game info: gameId, gameStatus, gameEt, period, etc.
-        teams_df = dfs[2]   # team data: teamId, teamCity, teamName, score, wins, losses
-
-        if games_df.empty:
-            return jsonify({'date': date_str, 'games': []})
-
-        # Build team lookup by game
-        games = {}
-        for _, t in teams_df.iterrows():
-            gid = t['gameId']
-            if gid not in games:
-                games[gid] = {'gameId': gid, 'home': {}, 'away': {}}
-
-        # Merge game info
-        for _, g in games_df.iterrows():
-            gid = g['gameId']
-            if gid in games:
-                games[gid]['gameStatus'] = g.get('gameStatus', '')
-                games[gid]['gameStatusText'] = g.get('gameStatusText', '')
-                games[gid]['gameEt'] = g.get('gameEt', '')
-                games[gid]['period'] = g.get('period', 0)
-                games[gid]['gameCode'] = g.get('gameCode', '')
-
-        # Attach teams (no home/away flag in V3 — use teamId parity as fallback)
-        for _, t in teams_df.iterrows():
-            gid = t['gameId']
-            if gid not in games:
-                continue
-            entry = {
-                'teamId': int(t['teamId']),
-                'teamCity': t.get('teamCity', ''),
-                'teamName': t.get('teamName', ''),
-                'teamTricode': t.get('teamTricode', ''),
-                'score': int(t['score']) if pd.notna(t.get('score')) else None,
-                'wins': int(t['wins']) if pd.notna(t.get('wins')) else 0,
-                'losses': int(t['losses']) if pd.notna(t.get('losses')) else 0,
-            }
-            # Heuristic: lower teamId = home
-            if not games[gid]['home']:
-                games[gid]['home'] = entry
-            else:
-                games[gid]['away'] = entry
-
-        result = [v for v in games.values() if v['home'] and v['away']]
-        return jsonify({'date': date_str, 'games': result})
+        import requests
+        espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
+        resp = requests.get(espn_url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        # Transform ESPN structure to our expected format
+        games = []
+        for event in data.get('events', []):
+            competition = event['competitions'][0]
+            home = competition['competitors'][0]
+            away = competition['competitors'][1]
+            games.append({
+                'gameId': event.get('id'),
+                'home': {
+                    'teamId': home.get('id'),
+                    'teamTricode': home['team']['abbreviation'],
+                    'teamCity': home['team'].get('location', ''),
+                    'teamName': home['team'].get('name', ''),
+                    'score': int(home.get('score', 0)),
+                    'wins': int(home.get('wins', 0)),
+                    'losses': int(home.get('losses', 0)),
+                },
+                'away': {
+                    'teamId': away.get('id'),
+                    'teamTricode': away['team']['abbreviation'],
+                    'teamCity': away['team'].get('location', ''),
+                    'teamName': away['team'].get('name', ''),
+                    'score': int(away.get('score', 0)),
+                    'wins': int(away.get('wins', 0)),
+                    'losses': int(away.get('losses', 0)),
+                },
+                'gameStatus': event['status']['type']['description'],
+                'gameStatusText': event['status']['type'].get('detail', ''),
+                'gameEt': event['date'],
+                'period': event['status'].get('period', 0),
+                'gameCode': event.get('shortName', ''),
+            })
+        return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
     except Exception as e:
-        return jsonify({'error': str(e), 'date': date_str, 'games': []})
+        # Fallback to original NBA API attempt if ESPN fails
+        try:
+            dfs = ScoreboardV3(game_date=date_str).get_data_frames()
+            if not dfs or len(dfs) < 3:
+                raise RuntimeError('Unexpected NBA API response')
+            games_df = dfs[1]
+            teams_df = dfs[2]
+            if games_df.empty:
+                raise RuntimeError('No games returned')
+            games = {}
+            for _, t in teams_df.iterrows():
+                gid = t['gameId']
+                if gid not in games:
+                    games[gid] = {'gameId': gid, 'home': {}, 'away': {}}
+            for _, g in games_df.iterrows():
+                gid = g['gameId']
+                if gid in games:
+                    games[gid].update({
+                        'gameStatus': g.get('gameStatus', ''),
+                        'gameStatusText': g.get('gameStatusText', ''),
+                        'gameEt': g.get('gameEt', ''),
+                        'period': g.get('period', 0),
+                        'gameCode': g.get('gameCode', ''),
+                    })
+            for _, t in teams_df.iterrows():
+                gid = t['gameId']
+                if gid not in games:
+                    continue
+                entry = {
+                    'teamId': int(t['teamId']),
+                    'teamCity': t.get('teamCity', ''),
+                    'teamName': t.get('teamName', ''),
+                    'teamTricode': t.get('teamTricode', ''),
+                    'score': int(t['score']) if pd.notna(t.get('score')) else None,
+                    'wins': int(t.get('wins')) if pd.notna(t.get('wins')) else 0,
+                    'losses': int(t.get('losses')) if pd.notna(t.get('losses')) else 0,
+                }
+                if not games[gid]['home']:
+                    games[gid]['home'] = entry
+                else:
+                    games[gid]['away'] = entry
+            result = [v for v in games.values() if v['home'] and v['away']]
+            return jsonify({'date': date_str, 'games': result, 'source': 'nba_api'})
+        except Exception as nba_err:
+            return jsonify({
+                'error': 'Failed to fetch scoreboard from both ESPN and NBA API',
+                'espn_error': str(e),
+                'nba_api_error': str(nba_err),
+                'date': date_str,
+                'games': []
+            })
 
 
 @app.route('/api/start-sit', methods=['POST'])
