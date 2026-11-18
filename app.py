@@ -179,6 +179,97 @@ def parse_game_date(date_str: str) -> date:
     raise ValueError(f"Unable to parse date: {date_str}")
 
 
+# =====================================================================
+# ESPN Public API Helpers
+# =====================================================================
+
+@lru_cache(maxsize=64)
+def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
+    """
+    Get a team's full-season schedule from the ESPN public API.
+    Returns a DataFrame with the same column names used elsewhere
+    (GAME_DATE, homeTeam_teamId, awayTeam_teamId,
+     homeTeam_teamTricode, awayTeam_teamTricode) so it can be swapped in
+    for ScheduleLeagueV2 output.
+    """
+    try:
+        import requests
+        # ESPN expects an integer season year (e.g. 2026 for the 2026-27 season)
+        start_year = int(season.split('-')[0])
+        espn_url = (
+            f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/"
+            f"teams/{team_id}/schedule?season={start_year}"
+        )
+        resp = requests.get(espn_url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        rows = []
+        for event in data.get('events', []):
+            comp = event.get('competitions', [{}])[0]
+            competitors = comp.get('competitors', [])
+            if len(competitors) < 2:
+                continue
+            # ESPN may list home team first or not — normalize by homeAway flag
+            home_comp = None
+            away_comp = None
+            for c in competitors:
+                if c.get('homeAway') == 'home':
+                    home_comp = c
+                elif c.get('homeAway') == 'away':
+                    away_comp = c
+            if home_comp is None or away_comp is None:
+                # Fall back to positional order
+                home_comp, away_comp = competitors[0], competitors[1]
+
+            home_team = home_comp.get('team', {})
+            away_team = away_comp.get('team', {})
+
+            # Parse ISO date
+            try:
+                game_date = datetime.fromisoformat(
+                    event.get('date', '').replace('Z', '+00:00')
+                ).date()
+            except (ValueError, TypeError):
+                continue
+
+            status = comp.get('status', {}).get('type', {}).get('description', '')
+
+            def _score(comp):
+                s = comp.get('score')
+                return int(s) if s is not None else None
+
+            rows.append({
+                'GAME_DATE': game_date,
+                'homeTeam_teamId': int(home_team.get('id', 0)),
+                'awayTeam_teamId': int(away_team.get('id', 0)),
+                'homeTeam_teamTricode': home_team.get('abbreviation', ''),
+                'awayTeam_teamTricode': away_team.get('abbreviation', ''),
+                'homeTeam_score': _score(home_comp),
+                'awayTeam_score': _score(away_comp),
+                'status': status,
+            })
+
+        return pd.DataFrame(rows)
+    except Exception as e:
+        print(f"Error fetching ESPN team schedule for team_id={team_id}: {e}")
+        return pd.DataFrame()
+
+
+@lru_cache(maxsize=16)
+def get_espn_all_teams_schedule(season: str = '2026-27') -> pd.DataFrame:
+    """Get the full-season schedule for every team from ESPN (cached)."""
+    all_teams = get_all_teams()
+    frames = []
+    for team in all_teams:
+        df = get_espn_team_schedule(team['id'], season)
+        if not df.empty:
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 @lru_cache(maxsize=64)
 def get_team_schedule_analysis(team_id: int, days_ahead: int = 7, season: str = '2026-27') -> Dict:
     """Analyze upcoming schedule: games count, rest days, B2Bs"""
