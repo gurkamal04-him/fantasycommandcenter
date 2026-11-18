@@ -120,7 +120,12 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
 def get_team_gamelog(team_id: int, season: str = '2026-27', n_games: int = 50) -> pd.DataFrame:
     """Get team game log for current season"""
     try:
-        df = TeamGameLog(team_id=team_id, season=season, season_type_all_star='Regular Season').get_data_frames()[0]
+        df = LeagueGameLog(
+            player_or_team_abbreviation='T',
+            season=season,
+            season_type_all_star='Regular Season'
+        ).get_data_frames()[0]
+        df = df[df['TEAM_ID'] == team_id].copy()
         df = df.sort_values('GAME_DATE', ascending=False).head(n_games).reset_index(drop=True)
         return df
     except Exception as e:
@@ -177,7 +182,12 @@ def parse_game_date(date_str: str) -> date:
 def get_team_schedule_analysis(team_id: int, days_ahead: int = 7, season: str = '2026-27') -> Dict:
     """Analyze upcoming schedule: games count, rest days, B2Bs"""
     try:
-        df = TeamGameLog(team_id=team_id, season=season, season_type_all_star='Regular Season').get_data_frames()[0]
+        df = LeagueGameLog(
+            player_or_team_abbreviation='T',
+            season=season,
+            season_type_all_star='Regular Season'
+        ).get_data_frames()[0]
+        df = df[df['TEAM_ID'] == team_id].copy()
         df = df.sort_values('GAME_DATE', ascending=True).reset_index(drop=True)
 
         today = datetime.now().date()
@@ -836,42 +846,79 @@ def get_weekly_schedule_analyzer(week: int, season: str = '2026-27') -> Dict[str
         # Day labels
         day_labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+        # Fetch full season schedule (one call, much faster than per-team calls)
+        # ScheduleLeagueV2 returns one row per game with home/away team info
+        schedule_df = ScheduleLeagueV2(league_id='00', season=season).get_data_frames()[0]
+        # Normalize date format
+        schedule_df['GAME_DATE'] = pd.to_datetime(schedule_df['gameDate']).dt.date
+        # Filter to our week
+        week_schedule = schedule_df[
+            (schedule_df['GAME_DATE'] >= week_start) &
+            (schedule_df['GAME_DATE'] <= week_end)
+        ].copy()
+
         teams_data = []
 
         for team in all_teams_list:
             tid = team['id']
-            # Get team schedule
-            df = TeamGameLog(team_id=tid, season=season, season_type_all_star='Regular Season').get_data_frames()[0]
-            df = df.sort_values('GAME_DATE', ascending=True).reset_index(drop=True)
+            abbr = team['abbreviation']
+
+            # Get this team's games for the week (home or away)
+            home_games = week_schedule[week_schedule['homeTeam_teamId'] == tid]
+            away_games = week_schedule[week_schedule['awayTeam_teamId'] == tid]
 
             # Filter games for this week and ensure no duplicate game dates per team
             week_games = []
             seen_dates = set()
-            for _, row in df.iterrows():
-                game_date = parse_game_date(row['GAME_DATE'])
-                if week_start <= game_date <= week_end:
-                    if game_date in seen_dates:
-                        # Skip duplicate: a team should have at most one game per day
-                        continue
-                    seen_dates.add(game_date)
-                    matchup = row['MATCHUP']
-                    is_home = 'vs.' in matchup
-                    opp_tricode = matchup.split()[-1]
-                    opp_id = get_team_id(opp_tricode)
 
-                    opp_stats = team_stats.get(opp_id, {'OFF_RATING': 112, 'DEF_RATING': 112, 'PACE': 98})
+            # Process home games
+            for _, row in home_games.iterrows():
+                game_date = row['GAME_DATE']
+                if game_date in seen_dates:
+                    continue
+                seen_dates.add(game_date)
 
-                    week_games.append({
-                        'date': game_date,
-                        'day': day_labels[game_date.weekday()],
-                        'matchup': matchup,
-                        'is_home': is_home,
-                        'opp_tricode': opp_tricode,
-                        'opp_id': opp_id,
-                        'opp_off_rating': opp_stats['OFF_RATING'],
-                        'opp_def_rating': opp_stats['DEF_RATING'],
-                        'opp_pace': opp_stats['PACE'],
-                        'wl': row.get('WL', ''),
+                opp_tricode = row['awayTeam_teamTricode']
+                opp_id = get_team_id(opp_tricode)
+                opp_stats = team_stats.get(opp_id, {'OFF_RATING': 112, 'DEF_RATING': 112, 'PACE': 98})
+
+                week_games.append({
+                    'date': game_date,
+                    'day': day_labels[game_date.weekday()],
+                    'matchup': f"{abbr} vs. {opp_tricode}",
+                    'is_home': True,
+                    'opp_tricode': opp_tricode,
+                    'opp_id': opp_id,
+                    'opp_off_rating': opp_stats['OFF_RATING'],
+                    'opp_def_rating': opp_stats['DEF_RATING'],
+                    'opp_pace': opp_stats['PACE'],
+                    'wl': '',
+                })
+
+            # Process away games
+            for _, row in away_games.iterrows():
+                game_date = row['GAME_DATE']
+                if game_date in seen_dates:
+                    continue
+                seen_dates.add(game_date)
+
+                opp_tricode = row['homeTeam_teamTricode']
+                opp_id = get_team_id(opp_tricode)
+                opp_stats = team_stats.get(opp_id, {'OFF_RATING': 112, 'DEF_RATING': 112, 'PACE': 98})
+
+                week_games.append({
+                    'date': game_date,
+                    'day': day_labels[game_date.weekday()],
+                    'matchup': f"{abbr} @ {opp_tricode}",
+                    'is_home': False,
+                    'opp_tricode': opp_tricode,
+                    'opp_id': opp_id,
+                    'opp_off_rating': opp_stats['OFF_RATING'],
+                    'opp_def_rating': opp_stats['DEF_RATING'],
+                    'opp_pace': opp_stats['PACE'],
+                    'wl': '',
+                })
+                        'wl': '',
                     })
 
             # Count games and B2B (before converting dates to strings)

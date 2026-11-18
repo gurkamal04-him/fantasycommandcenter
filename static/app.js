@@ -494,6 +494,7 @@
   });
 
   function renderWeeklySchedule(data) {
+    const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']; // ensure same order
     const tbody = $('#ws-tbody');
     const metaEl = $('#ws-meta');
     let teams = data.teams || [];
@@ -504,20 +505,44 @@
     // Apply sorting
     teams = sortTeams(teams, wsSortBy);
 
-    const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-
-    if (!teams.length) {
-      metaEl.innerHTML = `<div class="empty">No games scheduled for Week ${week} (${weekStart} to ${weekEnd})</div>`;
-      tbody.innerHTML = '';
-      return;
-    }
+    // Add game counts to meta info
+    const gamesCount = teams.reduce((sum, team) => sum + (team.games_count || 0), 0);
+    const b2bCount = teams.reduce((sum, team) => sum + (team.b2b_count || 0), 0);
 
     metaEl.innerHTML = `
       <div class="ws-meta-info">
         <strong>Week ${week}</strong> | ${weekStart} to ${weekEnd} |
-        <span class="team-count">${teams.length} teams</span>
+        <span class="team-count">${teams.length} teams</span> |
+        <span class="game-count">${gamesCount} total games</span> |
+        <span class="b2b-count">${b2bCount} B2Bs</span>
       </div>
     `;
+
+    if (!teams.length) {
+      tbody.innerHTML = '';
+      return;
+    }
+
+    // Compute total games per day across all teams
+    const dayGamesTotals = dayLabels.reduce((obj, day) => {
+      obj[day] = 0;
+      return obj;
+    }, {});
+    teams.forEach(team => {
+      const days = team.days || {};
+      dayLabels.forEach(day => {
+        const games = days[day] || [];
+        if (games.length) dayGamesTotals[day] += 1; // each team contributes at most 1 game per day
+      });
+    });
+    // Update day header labels with counts
+    dayLabels.forEach(day => {
+      const th = document.querySelector(`th[data-day="${day}"]`);
+      if (th) {
+        const count = dayGamesTotals[day] || 0;
+        th.innerHTML = `${day}<span class="ws-day-count">(${count})</span>`;
+      }
+    });
 
     tbody.innerHTML = teams.map(team => {
       const abbr = team.abbreviation;
@@ -537,7 +562,7 @@
 
       return `
         <tr class="${gamesClass}">
-          <td class="ws-team-cell"><span class="team-abbr">${abbr}</span></td>
+          <td class="ws-team-cell"><span class="team-abbr">${abbr}</span> <span class="ws-games-count">(${gamesCount})</span></td>
           ${dayCells}
         </tr>
       `;

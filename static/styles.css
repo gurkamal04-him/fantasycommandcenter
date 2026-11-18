@@ -578,7 +578,18 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .ws-team-col { width: 80px; position: sticky; left: 0; z-index: 2; background: var(--surface); }
 .ws-day-col { width: 110px; min-width: 110px; position: sticky; top: 0; text-align: center; }
 .ws-team-cell { font-family: var(--font-display); font-weight: 600; font-size: 13px; }
-.ws-games-count { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+.ws-games-count {
+    font-weight: normal;
+    color: var(--text-muted);
+    margin-left: 0.3rem;
+    font-size: 0.85rem;
+}
+.ws-day-count {
+    font-weight: normal;
+    color: var(--text-muted);
+    margin-left: 0.2rem;
+    font-size: 0.85rem;
+}
 .ws-games-count.ws-high { color: var(--good); }
 .ws-games-count.ws-med { color: var(--warn); }
 .ws-b2b-count.b2b { color: var(--warn); font-weight: 600; }
