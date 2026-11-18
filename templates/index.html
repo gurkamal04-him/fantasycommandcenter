@@ -1,0 +1,559 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- =================================================================== -->
+<!-- HUB / DASHBOARD                                                     -->
+<!-- =================================================================== -->
+<section id="hub" class="page" aria-labelledby="hub-title">
+  <header class="page-header">
+    <div class="eyebrow">NBA Fantasy Command Center</div>
+    <h1 id="hub-title">Dashboard</h1>
+    <p class="sub">Your Head-to-Head Points League command center. Live data, custom scoring, automated projections.</p>
+  </header>
+
+  <div class="hub-grid">
+    <!-- Quick Win Projector -->
+    <section class="panel hub-card" id="quick-projector">
+      <h2>Quick Win Projector</h2>
+      <div class="field-row">
+        <div class="field">
+          <label for="qp-my-cur">Your Points</label>
+          <input id="qp-my-cur" type="number" step="0.1" min="0" placeholder="842.5">
+        </div>
+        <div class="field">
+          <label for="qp-my-proj">Your Proj.</label>
+          <input id="qp-my-proj" type="number" step="0.1" min="0" placeholder="1312">
+        </div>
+        <div class="field">
+          <label for="qp-my-gp">Played / Total</label>
+          <div class="ratio"><input id="qp-my-gp" type="number" step="1" min="0" placeholder="19"><span>/</span><input id="qp-my-tot" type="number" step="1" min="0" placeholder="50"></div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="qp-opp-cur">Opp Points</label>
+          <input id="qp-opp-cur" type="number" step="0.1" min="0" placeholder="801">
+        </div>
+        <div class="field">
+          <label for="qp-opp-proj">Opp Proj.</label>
+          <input id="qp-opp-proj" type="number" step="0.1" min="0" placeholder="1278">
+        </div>
+        <div class="field">
+          <label for="qp-opp-gp">Played / Total</label>
+          <div class="ratio"><input id="qp-opp-gp" type="number" step="1" min="0" placeholder="22"><span>/</span><input id="qp-opp-tot" type="number" step="1" min="0" placeholder="50"></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="qp-calc">Calculate Win %</button>
+      <div class="qp-result" id="qp-result" hidden>
+        <div class="qp-big"><span class="qp-pct" id="qp-pct">--</span><span class="chip" id="qp-chip">--</span></div>
+        <div class="bar" role="img"><span id="qp-bar" style="width:0%"></span></div>
+        <p class="qp-note" id="qp-note"></p>
+      </div>
+    </section>
+
+    <!-- Today's Games -->
+    <section class="panel hub-card" id="todays-games">
+      <h2>Today's Games</h2>
+      <div class="date-picker">
+        <label for="scoreboard-date">Date</label>
+        <input id="scoreboard-date" type="date" value="{{ today }}">
+        <button class="btn btn-ghost" id="sb-refresh">Refresh</button>
+      </div>
+      <div id="scoreboard-games" class="scoreboard-list">Loading…</div>
+    </section>
+
+    <!-- Top Streamers -->
+    <section class="panel hub-card" id="top-streamers">
+      <h2>Top Stream Targets (Next 7 Days)</h2>
+      <div id="streamer-list" class="streamer-list">Loading…</div>
+    </section>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- SCHEDULE PAGE                                                       -->
+<!-- =================================================================== -->
+<section id="schedule" class="page" aria-labelledby="schedule-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Weekly Schedule Analysis</div>
+    <h1 id="schedule-title">Schedule Center</h1>
+    <p class="sub">Analyze team game density, rest days, opponent ratings, and pace. Filter by week and days to find streaming targets and favorable matchups.</p>
+  </header>
+
+  <!-- Main Controls for Weekly Grid -->
+  <div class="controls-row schedule-main-controls">
+    <div class="field week-selector">
+      <label>Week</label>
+      <div class="week-buttons" id="week-buttons"></div>
+    </div>
+    <div class="field day-filter">
+      <label>Days</label>
+      <div class="day-checkboxes" id="day-checkboxes"></div>
+    </div>
+    <div class="field">
+      <label for="ws-season">Season</label>
+      <select id="ws-season" class="select">
+        <option value="2026-27" selected>2026-27</option>
+        <option value="2025-26">2025-26</option>
+        <option value="2024-25">2024-25</option>
+        <option value="2023-24">2023-24</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="ws-sort">Sort By</label>
+      <select id="ws-sort" class="select">
+        <option value="games_desc">Games (High → Low)</option>
+        <option value="games_asc">Games (Low → High)</option>
+        <option value="team">Team (A-Z)</option>
+        <option value="b2b">Back-to-Backs</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="ws-load">Load Week</button>
+    <button class="btn btn-ghost" id="ws-export">Export CSV</button>
+  </div>
+
+  <!-- Weekly Schedule Grid (Main View) -->
+  <div class="panel" id="weekly-schedule-results">
+    <div class="ws-meta" id="ws-meta"></div>
+    <div class="table-wrap">
+      <table class="data-table ws-table" id="ws-table">
+        <thead>
+          <tr>
+            <th class="ws-team-col">Team</th>
+            <th class="ws-day-col" data-day="Mon">Mon</th>
+            <th class="ws-day-col" data-day="Tue">Tue</th>
+            <th class="ws-day-col" data-day="Wed">Wed</th>
+            <th class="ws-day-col" data-day="Thu">Thu</th>
+            <th class="ws-day-col" data-day="Fri">Fri</th>
+            <th class="ws-day-col" data-day="Sat">Sat</th>
+            <th class="ws-day-col" data-day="Sun">Sun</th>
+          </tr>
+        </thead>
+        <tbody id="ws-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="ws-legend" id="ws-legend" hidden>
+    <div class="legend-row">
+      <span class="legend-title">Matchup Indicators:</span>
+      <span class="legend-item"><span class="legend-badge home">vs</span> Home Game</span>
+      <span class="legend-item"><span class="legend-badge away">@</span> Away Game</span>
+    </div>
+  </div>
+
+  <!-- ROS Heatmap Section -->
+  <div class="section-divider"></div>
+  <header class="page-header">
+    <div class="eyebrow">Rest of Season</div>
+    <h2>ROS Heatmap</h2>
+    <p class="sub">Week-by-week game density for all teams. Identify high-volume weeks for streaming.</p>
+  </header>
+  <div class="controls-row">
+    <div class="field">
+      <label for="heatmap-weeks">Weeks Ahead</label>
+      <select id="heatmap-weeks" class="select">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="6">6</option>
+        <option value="8">8</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="heatmap-sort">Sort</label>
+      <select id="heatmap-sort" class="select">
+        <option value="total_desc">Total Games (High → Low)</option>
+        <option value="team">Team (A-Z)</option>
+        <option value="b2b">Back-to-Backs</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="heatmap-run">Generate Heatmap</button>
+    <button class="btn btn-ghost" id="heatmap-export">Export CSV</button>
+  </div>
+  <div class="panel" id="heatmap-results">
+    <div class="table-wrap" id="heatmap-table-wrap">
+      <div class="empty">Click "Generate Heatmap" to load data</div>
+    </div>
+  </div>
+
+  <!-- Schedule Summarizer Section (Lookahead) -->
+  <div class="section-divider"></div>
+  <header class="page-header">
+    <div class="eyebrow">Schedule Summarizer</div>
+    <h2>Upcoming Schedule Lookahead</h2>
+    <p class="sub">Analyze team game density, rest days, and back-to-backs over the next 7-21 days.</p>
+  </header>
+  <div class="controls-row">
+    <div class="field">
+      <label for="sched-days">Lookahead (days)</label>
+      <select id="sched-days" class="select">
+        <option value="7">7 Days</option>
+        <option value="14" selected>14 Days</option>
+        <option value="21">21 Days</option>
+        <option value="30">30 Days</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sched-min-games">Min Games</label>
+      <input id="sched-min-games" type="number" min="1" max="6" value="3" step="1">
+    </div>
+    <div class="field">
+      <label for="sched-sort">Sort By</label>
+      <select id="sched-sort" class="select">
+        <option value="games_desc">Games (High → Low)</option>
+        <option value="b2b">Back-to-Backs</option>
+        <option value="rest">Avg Rest (Low → High)</option>
+        <option value="team">Team (A-Z)</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="sched-run">Analyze</button>
+    <button class="btn btn-ghost" id="sched-export">Export CSV</button>
+  </div>
+
+  <div class="panel" id="schedule-results">
+    <div class="table-wrap">
+      <table class="data-table" id="sched-table">
+        <thead>
+          <tr>
+            <th>Team</th>
+            <th>Games</th>
+            <th>B2B</th>
+            <th>Avg Rest</th>
+            <th>Schedule</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- ADVANCED BOX SCORE VIEWER                                           -->
+<!-- =================================================================== -->
+<section id="boxscore" class="page" aria-labelledby="boxscore-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Game Analysis</div>
+    <h1 id="boxscore-title">Advanced Box Score</h1>
+    <p class="sub">Detailed player performances with FPS, Usage%, and shooting splits using your custom scoring.</p>
+  </header>
+
+  <div class="controls-row">
+    <div class="field">
+      <label for="bs-game-id">Game ID</label>
+      <input id="bs-game-id" type="text" placeholder="0022400001" pattern="\d{10}">
+    </div>
+    <button class="btn btn-primary" id="bs-load">Load Box Score</button>
+  </div>
+
+  <!-- Today's Games (on Box Score page) -->
+  <div class="panel hub-card" id="bs-todays-games" style="margin-top:16px">
+    <h2>Today's Games</h2>
+    <div class="date-picker">
+      <label for="bs-scoreboard-date">Date</label>
+      <input id="bs-scoreboard-date" type="date" value="{{ today }}">
+      <button class="btn btn-ghost" id="bs-sb-refresh">Refresh</button>
+    </div>
+    <div id="bs-scoreboard-games" class="scoreboard-list">Loading…</div>
+  </div>
+
+  <div class="panel" id="boxscore-results" hidden>
+    <div class="bs-meta" id="bs-meta"></div>
+    <div class="table-wrap">
+      <table class="data-table" id="bs-table">
+        <thead>
+          <tr>
+            <th class="th-sort" data-sort="name">Player</th>
+            <th class="th-sort" data-sort="team">Team</th>
+            <th class="th-sort" data-sort="min">Min</th>
+            <th class="th-sort" data-sort="pts">PTS</th>
+            <th class="th-sort" data-sort="reb">REB</th>
+            <th class="th-sort" data-sort="ast">AST</th>
+            <th class="th-sort" data-sort="stl">STL</th>
+            <th class="th-sort" data-sort="blk">BLK</th>
+            <th class="th-sort" data-sort="tov">TOV</th>
+            <th class="th-sort" data-sort="fg">FG%</th>
+            <th class="th-sort" data-sort="fg3">3P%</th>
+            <th class="th-sort" data-sort="ft">FT%</th>
+            <th class="th-sort" data-sort="usage">Usage%</th>
+            <th class="th-sort" data-sort="fps">FPS</th>
+            <th class="th-sort" data-sort="pm">±</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- PLAYER RANKINGS                                                     -->
+<!-- =================================================================== -->
+<section id="rankings" class="page" aria-labelledby="rankings-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">League Leaderboard</div>
+    <h1 id="rankings-title">Player Rankings</h1>
+    <p class="sub">Top 200 players ranked by total fantasy points over your selected period, with averages and usage.</p>
+  </header>
+
+  <div class="controls-row">
+    <div class="field">
+      <label for="rk-period">Time Period</label>
+      <select id="rk-period" class="select">
+        <option value="season" selected>Whole Season</option>
+        <option value="2weeks">Last 2 Weeks</option>
+        <option value="1week">Last Week</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="rk-season">Season</label>
+      <select id="rk-season" class="select">
+        <option value="2026-27" selected>2026-27</option>
+        <option value="2025-26">2025-26</option>
+        <option value="2024-25">2024-25</option>
+        <option value="2023-24">2023-24</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="rk-sort">Sort By</label>
+      <select id="rk-sort" class="select">
+        <option value="total_fps">Total FPS</option>
+        <option value="avg_fps">Avg FPS</option>
+        <option value="games">Games</option>
+        <option value="usage">Usage%</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="rk-load">Load Rankings</button>
+    <button class="btn btn-ghost" id="rk-export">Export CSV</button>
+  </div>
+
+  <div class="panel" id="rankings-results">
+    <div class="rk-meta" id="rk-meta"></div>
+    <div class="table-wrap">
+      <table class="data-table rk-table" id="rk-table">
+        <thead>
+          <tr>
+            <th class="rk-rank">#</th>
+            <th class="th-sort" data-sort="name">Player</th>
+            <th class="th-sort" data-sort="team">Team</th>
+            <th class="rk-gms">Gms</th>
+            <th class="th-sort" data-sort="pts">PTS</th>
+            <th class="th-sort" data-sort="reb">REB</th>
+            <th class="th-sort" data-sort="ast">AST</th>
+            <th class="th-sort" data-sort="stl">STL</th>
+            <th class="th-sort" data-sort="blk">BLK</th>
+            <th class="th-sort" data-sort="tov">TOV</th>
+            <th class="th-sort" data-sort="usage">Usage%</th>
+            <th class="th-sort rk-fps" data-sort="fps">FPS</th>
+            <th class="rk-total">Total FPS</th>
+          </tr>
+        </thead>
+        <tbody id="rk-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- WHO SHOULD I START?                                                 -->
+<!-- =================================================================== -->
+<section id="startsit" class="page" aria-labelledby="startsit-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Lineup Decision</div>
+    <h1 id="startsit-title">Who Should I Start?</h1>
+    <p class="sub">Compare two players with recent form, injury context, and matchup analysis.</p>
+  </header>
+
+  <div class="startsit-input">
+    <div class="field">
+      <label for="ss-player-a">Player A</label>
+      <input id="ss-player-a" type="text" placeholder="e.g., Jayson Tatum" autocomplete="off">
+      <div class="autocomplete" id="ss-ac-a" hidden></div>
+    </div>
+    <span class="vs-label">vs</span>
+    <div class="field">
+      <label for="ss-player-b">Player B</label>
+      <input id="ss-player-b" type="text" placeholder="e.g., Jaylen Brown" autocomplete="off">
+      <div class="autocomplete" id="ss-ac-b" hidden></div>
+    </div>
+    <button class="btn btn-primary" id="ss-compare">Compare</button>
+  </div>
+
+  <div class="panel" id="startsit-results" hidden>
+    <div class="ss-verdict" id="ss-verdict"></div>
+    <div class="ss-grid">
+      <div class="ss-card" id="ss-card-a"></div>
+      <div class="ss-card" id="ss-card-b"></div>
+    </div>
+    <div class="ss-reasoning" id="ss-reasoning"></div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- TRADE ANALYZER                                                      -->
+<!-- =================================================================== -->
+<section id="trade" class="page" aria-labelledby="trade-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Trade Evaluation</div>
+    <h1 id="trade-title">Trade Analyzer</h1>
+    <p class="sub">Compare two rosters using 7-day FPS projections and VORP logic.</p>
+  </header>
+
+  <div class="trade-input">
+    <div class="roster-column">
+      <h3>Roster A (You Receive)</h3>
+      <div class="roster-players" id="trade-roster-a">
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="trade-add-a">+ Add Player</button>
+    </div>
+    <div class="roster-column">
+      <h3>Roster B (You Send)</h3>
+      <div class="roster-players" id="trade-roster-b">
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+        <div class="player-row"><input type="text" placeholder="Player name" autocomplete="off"><button class="btn btn-sm btn-remove" aria-label="Remove">×</button></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="trade-add-b">+ Add Player</button>
+    </div>
+    <button class="btn btn-primary btn-lg" id="trade-analyze">Analyze Trade</button>
+  </div>
+
+  <div class="panel" id="trade-results" hidden>
+    <div class="trade-verdict" id="trade-verdict"></div>
+    <div class="trade-grid">
+      <div class="trade-side" id="trade-side-a"></div>
+      <div class="trade-side" id="trade-side-b"></div>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- WIN PROJECTOR (Full)                                                -->
+<!-- =================================================================== -->
+<section id="projector" class="page" aria-labelledby="projector-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Head-to-head points league</div>
+    <h1 id="projector-title">Win Projector</h1>
+    <p class="sub">Enter the numbers from your Yahoo matchup page to see this week's win chance, then roll it up into a season outlook.</p>
+  </header>
+
+  <section class="panel teams" aria-label="Matchup inputs">
+    <div class="team">
+      <h2>You <span class="tag">your team</span></h2>
+      <div class="field">
+        <label for="myCur">Points right now</label>
+        <input id="myCur" type="number" inputmode="decimal" step="any" min="0">
+      </div>
+      <div class="field">
+        <label for="myProj">Projected final points</label>
+        <input id="myProj" type="number" inputmode="decimal" step="any" min="0">
+        <span class="hint">The Proj figure on the matchup page.</span>
+      </div>
+      <div class="field">
+        <label for="myGP">Player-games played / total this week</label>
+        <div class="ratio"><input id="myGP" type="number" inputmode="numeric" step="1" min="0" aria-label="Your player-games played"><span>/</span><input id="myTot" type="number" inputmode="numeric" step="1" min="0" aria-label="Your player-games total this week"></div>
+        <span class="hint" id="myRem"></span>
+      </div>
+    </div>
+    <div class="team">
+      <h2>Opponent <span class="tag">their team</span></h2>
+      <div class="field">
+        <label for="oppCur">Points right now</label>
+        <input id="oppCur" type="number" inputmode="decimal" step="any" min="0">
+      </div>
+      <div class="field">
+        <label for="oppProj">Projected final points</label>
+        <input id="oppProj" type="number" inputmode="decimal" step="any" min="0">
+      </div>
+      <div class="field">
+        <label for="oppGP">Player-games played / total this week</label>
+        <div class="ratio"><input id="oppGP" type="number" inputmode="numeric" step="1" min="0" aria-label="Opponent player-games played"><span>/</span><input id="oppTot" type="number" inputmode="numeric" step="1" min="0" aria-label="Opponent player-games total this week"></div>
+        <span class="hint" id="oppRem"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel result" aria-live="polite">
+    <div class="eyebrow">This week</div>
+    <div class="big">
+      <div class="pct" id="pct">--</div>
+      <span class="chip" id="chip">--</span>
+    </div>
+    <div>
+      <div class="bar" role="img" aria-label="Win probability bar"><span id="barfill" style="width:0%"></span></div>
+      <div class="bar-labels"><span>Opponent wins</span><span>You win</span></div>
+    </div>
+    <dl class="stats">
+      <div><dt>Current margin</dt><dd id="sMargin">--</dd></div>
+      <div><dt>Projected final margin</dt><dd id="sProjMargin">--</dd></div>
+      <div><dt>Likely range (68%)</dt><dd id="sRange">--</dd></div>
+      <div><dt>Points you still need</dt><dd id="sNeed">--</dd></div>
+    </dl>
+    <p class="note" id="needNote"></p>
+    <div class="settings">
+      <div class="field">
+        <label for="sd">Scoring spread per player-game</label>
+        <input id="sd" type="number" inputmode="decimal" step="0.5" min="1" value="9.5">
+        <span class="hint">Standard deviation of a player's fantasy points in one game. Higher means more variance and odds closer to 50%.</span>
+      </div>
+      <div class="field">
+        <label for="mode">How to read the projection</label>
+        <select id="mode" class="select">
+          <option value="rate">Full-week estimate (scores keep coming at that pace)</option>
+          <option value="live">Live Yahoo Proj (already includes points so far)</option>
+        </select>
+        <span class="hint">Full-week estimate turns the projection into a per-game pace, so points right now and games remaining both move the odds. Live Proj treats the projection as the final total, so only games remaining matter, through variance.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel result" aria-label="Season outlook">
+    <div class="eyebrow">Season outlook</div>
+    <h2>Projected win percentage</h2>
+    <div class="settings">
+      <div class="field"><label for="W">Wins</label><input id="W" type="number" inputmode="numeric" step="1" min="0" value="5"></div>
+      <div class="field"><label for="L">Losses</label><input id="L" type="number" inputmode="numeric" step="1" min="0" value="3"></div>
+      <div class="field"><label for="T">Ties</label><input id="T" type="number" inputmode="numeric" step="1" min="0" value="0"></div>
+      <div class="field">
+        <label for="left">Matchups left, including this week</label>
+        <input id="left" type="number" inputmode="numeric" step="1" min="1" value="6">
+      </div>
+      <div class="field">
+        <label for="avgP">Win chance in other weeks (%)</label>
+        <input id="avgP" type="number" inputmode="decimal" step="1" min="0" max="100" value="55">
+        <span class="hint">Use 50 if your team is average, higher if you are ahead of the league on points per week.</span>
+      </div>
+      <div class="field">
+        <label for="target">Wins needed for the playoffs</label>
+        <input id="target" type="number" inputmode="numeric" step="1" min="0" value="9">
+      </div>
+    </div>
+    <dl class="stats">
+      <div><dt>Expected final record</dt><dd id="oRecord">--</dd></div>
+      <div><dt>Expected win %</dt><dd id="oPct">--</dd></div>
+      <div><dt>Chance of reaching target</dt><dd id="oTarget">--</dd></div>
+    </dl>
+    <div>
+      <div class="hist" id="hist" aria-label="Chance of each final win total"></div>
+      <div class="axis"><span>Final wins</span><span id="histKey">Orange bars reach your target</span></div>
+    </div>
+    <p class="note">This week uses the matchup probability above. Other weeks all use the same win chance you enter, and each matchup is treated as independent. Ties count as half a win in win %.</p>
+  </section>
+
+  <p class="note">Method: the final point margin is modeled as a normal distribution centered on the difference in projected finals, with variance equal to the combined player-games remaining times the squared per-game spread. Games already played are locked in through the current points. It is an estimate, so update the numbers as the week goes.</p>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const TODAY = "{{ today }}";
+  const SCORING = {{ scoring|tojson }};
+</script>
+{% endblock %}

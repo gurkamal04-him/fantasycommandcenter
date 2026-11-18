@@ -1,0 +1,1666 @@
+{
+  "days": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+    "Sun"
+  ],
+  "teams": [
+    {
+      "abbreviation": "ATL",
+      "b2b_count": 2,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "ATL vs. CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": false,
+            "matchup": "ATL @ GSW",
+            "opp_def_rating": 113.2,
+            "opp_id": 1610612744,
+            "opp_off_rating": 115.8,
+            "opp_pace": 101.2,
+            "opp_tricode": "GSW",
+            "wl": ""
+          }
+        ],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "ATL vs. SAS",
+            "opp_def_rating": 116.5,
+            "opp_id": 1610612759,
+            "opp_off_rating": 110.8,
+            "opp_pace": 99.5,
+            "opp_tricode": "SAS",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "ATL vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 4,
+      "name": "Atlanta Hawks",
+      "team_id": 1610612737
+    },
+    {
+      "abbreviation": "NOP",
+      "b2b_count": 2,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "NOP vs. PHI",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612755,
+            "opp_off_rating": 114.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "PHI",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "NOP vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "NOP vs. HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "NOP @ MIA",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612748,
+            "opp_off_rating": 112.2,
+            "opp_pace": 97.8,
+            "opp_tricode": "MIA",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 4,
+      "name": "New Orleans Pelicans",
+      "team_id": 1610612740
+    },
+    {
+      "abbreviation": "DAL",
+      "b2b_count": 3,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": false,
+            "matchup": "DAL @ PHI",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612755,
+            "opp_off_rating": 114.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "PHI",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": false,
+            "matchup": "DAL @ UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "DAL @ CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": false,
+            "matchup": "DAL @ POR",
+            "opp_def_rating": 116.2,
+            "opp_id": 1610612757,
+            "opp_off_rating": 111.2,
+            "opp_pace": 99.2,
+            "opp_tricode": "POR",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 4,
+      "name": "Dallas Mavericks",
+      "team_id": 1610612742
+    },
+    {
+      "abbreviation": "MIA",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "MIA vs. OKC",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612760,
+            "opp_off_rating": 116.8,
+            "opp_pace": 100.8,
+            "opp_tricode": "OKC",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "MIA @ TOR",
+            "opp_def_rating": 114.2,
+            "opp_id": 1610612761,
+            "opp_off_rating": 112.8,
+            "opp_pace": 98.2,
+            "opp_tricode": "TOR",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "MIA vs. LAC",
+            "opp_def_rating": 112.8,
+            "opp_id": 1610612746,
+            "opp_off_rating": 114.8,
+            "opp_pace": 98.5,
+            "opp_tricode": "LAC",
+            "wl": ""
+          }
+        ],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": false,
+            "matchup": "MIA @ MIL",
+            "opp_def_rating": 113.5,
+            "opp_id": 1610612749,
+            "opp_off_rating": 117.2,
+            "opp_pace": 98.2,
+            "opp_tricode": "MIL",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 4,
+      "name": "Miami Heat",
+      "team_id": 1610612748
+    },
+    {
+      "abbreviation": "MIN",
+      "b2b_count": 2,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": false,
+            "matchup": "MIN @ CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": false,
+            "matchup": "MIN @ NOP",
+            "opp_def_rating": 115.2,
+            "opp_id": 1610612740,
+            "opp_off_rating": 113.5,
+            "opp_pace": 100.1,
+            "opp_tricode": "NOP",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": true,
+            "matchup": "MIN vs. CHI",
+            "opp_def_rating": 114.5,
+            "opp_id": 1610612741,
+            "opp_off_rating": 112.8,
+            "opp_pace": 99.8,
+            "opp_tricode": "CHI",
+            "wl": ""
+          }
+        ],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "MIN @ HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 4,
+      "name": "Minnesota Timberwolves",
+      "team_id": 1610612750
+    },
+    {
+      "abbreviation": "TOR",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "TOR vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "TOR @ LAL",
+            "opp_def_rating": 114.2,
+            "opp_id": 1610612747,
+            "opp_off_rating": 115.5,
+            "opp_pace": 99.8,
+            "opp_tricode": "LAL",
+            "wl": ""
+          }
+        ],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": false,
+            "matchup": "TOR @ CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "TOR vs. HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 4,
+      "name": "Toronto Raptors",
+      "team_id": 1610612761
+    },
+    {
+      "abbreviation": "WAS",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "WAS vs. ORL",
+            "opp_def_rating": 109.5,
+            "opp_id": 1610612753,
+            "opp_off_rating": 111.8,
+            "opp_pace": 96.8,
+            "opp_tricode": "ORL",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "WAS @ DEN",
+            "opp_def_rating": 112.5,
+            "opp_id": 1610612743,
+            "opp_off_rating": 118.5,
+            "opp_pace": 97.5,
+            "opp_tricode": "DEN",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "WAS @ PHX",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612756,
+            "opp_off_rating": 117.5,
+            "opp_pace": 101.5,
+            "opp_tricode": "PHX",
+            "wl": ""
+          }
+        ],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": true,
+            "matchup": "WAS vs. NOP",
+            "opp_def_rating": 115.2,
+            "opp_id": 1610612740,
+            "opp_off_rating": 113.5,
+            "opp_pace": 100.1,
+            "opp_tricode": "NOP",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 4,
+      "name": "Washington Wizards",
+      "team_id": 1610612764
+    },
+    {
+      "abbreviation": "DET",
+      "b2b_count": 2,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "DET vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "DET @ BKN",
+            "opp_def_rating": 115.5,
+            "opp_id": 1610612751,
+            "opp_off_rating": 112.5,
+            "opp_pace": 100.2,
+            "opp_tricode": "BKN",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "DET @ CHA",
+            "opp_def_rating": 117.5,
+            "opp_id": 1610612766,
+            "opp_off_rating": 109.8,
+            "opp_pace": 100.2,
+            "opp_tricode": "CHA",
+            "wl": ""
+          }
+        ],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "DET vs. NYK",
+            "opp_def_rating": 112.2,
+            "opp_id": 1610612752,
+            "opp_off_rating": 115.2,
+            "opp_pace": 97.5,
+            "opp_tricode": "NYK",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 4,
+      "name": "Detroit Pistons",
+      "team_id": 1610612765
+    },
+    {
+      "abbreviation": "CHA",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": false,
+            "matchup": "CHA @ MIL",
+            "opp_def_rating": 113.5,
+            "opp_id": 1610612749,
+            "opp_off_rating": 117.2,
+            "opp_pace": 98.2,
+            "opp_tricode": "MIL",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "CHA vs. DEN",
+            "opp_def_rating": 112.5,
+            "opp_id": 1610612743,
+            "opp_off_rating": 118.5,
+            "opp_pace": 97.5,
+            "opp_tricode": "DEN",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "CHA vs. CHI",
+            "opp_def_rating": 114.5,
+            "opp_id": 1610612741,
+            "opp_off_rating": 112.8,
+            "opp_pace": 99.8,
+            "opp_tricode": "CHI",
+            "wl": ""
+          }
+        ],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": false,
+            "matchup": "CHA @ CHI",
+            "opp_def_rating": 114.5,
+            "opp_id": 1610612741,
+            "opp_off_rating": 112.8,
+            "opp_pace": 99.8,
+            "opp_tricode": "CHI",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 4,
+      "name": "Charlotte Hornets",
+      "team_id": 1610612766
+    },
+    {
+      "abbreviation": "CLE",
+      "b2b_count": 2,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": false,
+            "matchup": "CLE @ GSW",
+            "opp_def_rating": 113.2,
+            "opp_id": 1610612744,
+            "opp_off_rating": 115.8,
+            "opp_pace": 101.2,
+            "opp_tricode": "GSW",
+            "wl": ""
+          }
+        ],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "CLE vs. HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "CLE vs. WAS",
+            "opp_def_rating": 117.2,
+            "opp_id": 1610612764,
+            "opp_off_rating": 110.5,
+            "opp_pace": 100.5,
+            "opp_tricode": "WAS",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Cleveland Cavaliers",
+      "team_id": 1610612739
+    },
+    {
+      "abbreviation": "DEN",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": false,
+            "matchup": "DEN @ MIA",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612748,
+            "opp_off_rating": 112.2,
+            "opp_pace": 97.8,
+            "opp_tricode": "MIA",
+            "wl": ""
+          }
+        ],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "DEN vs. BOS",
+            "opp_def_rating": 110.2,
+            "opp_id": 1610612738,
+            "opp_off_rating": 119.5,
+            "opp_pace": 98.3,
+            "opp_tricode": "BOS",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "DEN vs. NYK",
+            "opp_def_rating": 112.2,
+            "opp_id": 1610612752,
+            "opp_off_rating": 115.2,
+            "opp_pace": 97.5,
+            "opp_tricode": "NYK",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Denver Nuggets",
+      "team_id": 1610612743
+    },
+    {
+      "abbreviation": "GSW",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "GSW vs. DEN",
+            "opp_def_rating": 112.5,
+            "opp_id": 1610612743,
+            "opp_off_rating": 118.5,
+            "opp_pace": 97.5,
+            "opp_tricode": "DEN",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "GSW vs. CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "GSW vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "Golden State Warriors",
+      "team_id": 1610612744
+    },
+    {
+      "abbreviation": "LAC",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "LAC @ POR",
+            "opp_def_rating": 116.2,
+            "opp_id": 1610612757,
+            "opp_off_rating": 111.2,
+            "opp_pace": 99.2,
+            "opp_tricode": "POR",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "LAC vs. OKC",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612760,
+            "opp_off_rating": 116.8,
+            "opp_pace": 100.8,
+            "opp_tricode": "OKC",
+            "wl": ""
+          }
+        ],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "LAC vs. PHX",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612756,
+            "opp_off_rating": 117.5,
+            "opp_pace": 101.5,
+            "opp_tricode": "PHX",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Los Angeles Clippers",
+      "team_id": 1610612746
+    },
+    {
+      "abbreviation": "BKN",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "BKN vs. UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": true,
+            "matchup": "BKN vs. MIA",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612748,
+            "opp_off_rating": 112.2,
+            "opp_pace": 97.8,
+            "opp_tricode": "MIA",
+            "wl": ""
+          }
+        ],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "BKN vs. CHA",
+            "opp_def_rating": 117.5,
+            "opp_id": 1610612766,
+            "opp_off_rating": 109.8,
+            "opp_pace": 100.2,
+            "opp_tricode": "CHA",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "Brooklyn Nets",
+      "team_id": 1610612751
+    },
+    {
+      "abbreviation": "ORL",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "ORL vs. HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "ORL vs. LAC",
+            "opp_def_rating": 112.8,
+            "opp_id": 1610612746,
+            "opp_off_rating": 114.8,
+            "opp_pace": 98.5,
+            "opp_tricode": "LAC",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "ORL vs. ATL",
+            "opp_def_rating": 116.8,
+            "opp_id": 1610612737,
+            "opp_off_rating": 114.2,
+            "opp_pace": 99.5,
+            "opp_tricode": "ATL",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Orlando Magic",
+      "team_id": 1610612753
+    },
+    {
+      "abbreviation": "IND",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "IND @ WAS",
+            "opp_def_rating": 117.2,
+            "opp_id": 1610612764,
+            "opp_off_rating": 110.5,
+            "opp_pace": 100.5,
+            "opp_tricode": "WAS",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "IND @ WAS",
+            "opp_def_rating": 117.2,
+            "opp_id": 1610612764,
+            "opp_off_rating": 110.5,
+            "opp_pace": 100.5,
+            "opp_tricode": "WAS",
+            "wl": ""
+          }
+        ],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": false,
+            "matchup": "IND @ MIL",
+            "opp_def_rating": 113.5,
+            "opp_id": 1610612749,
+            "opp_off_rating": 117.2,
+            "opp_pace": 98.2,
+            "opp_tricode": "MIL",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "Indiana Pacers",
+      "team_id": 1610612754
+    },
+    {
+      "abbreviation": "PHX",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "PHX @ MIN",
+            "opp_def_rating": 109.8,
+            "opp_id": 1610612750,
+            "opp_off_rating": 113.8,
+            "opp_pace": 98.0,
+            "opp_tricode": "MIN",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": false,
+            "matchup": "PHX @ HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "PHX vs. CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Phoenix Suns",
+      "team_id": 1610612756
+    },
+    {
+      "abbreviation": "SAS",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "SAS vs. NYK",
+            "opp_def_rating": 112.2,
+            "opp_id": 1610612752,
+            "opp_off_rating": 115.2,
+            "opp_pace": 97.5,
+            "opp_tricode": "NYK",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "SAS @ DET",
+            "opp_def_rating": 114.8,
+            "opp_id": 1610612765,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "DET",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "SAS @ POR",
+            "opp_def_rating": 116.2,
+            "opp_id": 1610612757,
+            "opp_off_rating": 111.2,
+            "opp_pace": 99.2,
+            "opp_tricode": "POR",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "San Antonio Spurs",
+      "team_id": 1610612759
+    },
+    {
+      "abbreviation": "OKC",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "OKC vs. CLE",
+            "opp_def_rating": 111.5,
+            "opp_id": 1610612739,
+            "opp_off_rating": 117.8,
+            "opp_pace": 97.2,
+            "opp_tricode": "CLE",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": true,
+            "matchup": "OKC vs. MIL",
+            "opp_def_rating": 113.5,
+            "opp_id": 1610612749,
+            "opp_off_rating": 117.2,
+            "opp_pace": 98.2,
+            "opp_tricode": "MIL",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "OKC vs. DAL",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612742,
+            "opp_off_rating": 116.2,
+            "opp_pace": 99.2,
+            "opp_tricode": "DAL",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 3,
+      "name": "Oklahoma City Thunder",
+      "team_id": 1610612760
+    },
+    {
+      "abbreviation": "UTA",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "UTA vs. LAC",
+            "opp_def_rating": 112.8,
+            "opp_id": 1610612746,
+            "opp_off_rating": 114.8,
+            "opp_pace": 98.5,
+            "opp_tricode": "LAC",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "UTA vs. BKN",
+            "opp_def_rating": 115.5,
+            "opp_id": 1610612751,
+            "opp_off_rating": 112.5,
+            "opp_pace": 100.2,
+            "opp_tricode": "BKN",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "UTA @ DAL",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612742,
+            "opp_off_rating": 116.2,
+            "opp_pace": 99.2,
+            "opp_tricode": "DAL",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "Utah Jazz",
+      "team_id": 1610612762
+    },
+    {
+      "abbreviation": "MEM",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": false,
+            "matchup": "MEM @ PHI",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612755,
+            "opp_off_rating": 114.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "PHI",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "MEM vs. CHA",
+            "opp_def_rating": 117.5,
+            "opp_id": 1610612766,
+            "opp_off_rating": 109.8,
+            "opp_pace": 100.2,
+            "opp_tricode": "CHA",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": false,
+            "matchup": "MEM @ MIA",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612748,
+            "opp_off_rating": 112.2,
+            "opp_pace": 97.8,
+            "opp_tricode": "MIA",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 3,
+      "name": "Memphis Grizzlies",
+      "team_id": 1610612763
+    },
+    {
+      "abbreviation": "BOS",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "BOS @ DET",
+            "opp_def_rating": 114.8,
+            "opp_id": 1610612765,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "DET",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "BOS vs. WAS",
+            "opp_def_rating": 117.2,
+            "opp_id": 1610612764,
+            "opp_off_rating": 110.5,
+            "opp_pace": 100.5,
+            "opp_tricode": "WAS",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 2,
+      "name": "Boston Celtics",
+      "team_id": 1610612738
+    },
+    {
+      "abbreviation": "CHI",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "CHI vs. ATL",
+            "opp_def_rating": 116.8,
+            "opp_id": 1610612737,
+            "opp_off_rating": 114.2,
+            "opp_pace": 99.5,
+            "opp_tricode": "ATL",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "CHI vs. HOU",
+            "opp_def_rating": 110.8,
+            "opp_id": 1610612745,
+            "opp_off_rating": 111.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "HOU",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Chicago Bulls",
+      "team_id": 1610612741
+    },
+    {
+      "abbreviation": "HOU",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "HOU vs. OKC",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612760,
+            "opp_off_rating": 116.8,
+            "opp_pace": 100.8,
+            "opp_tricode": "OKC",
+            "wl": ""
+          }
+        ],
+        "Sun": [
+          {
+            "date": "Mon, 26 Oct 2026 00:00:00 GMT",
+            "day": "Sun",
+            "is_home": false,
+            "matchup": "HOU @ NYK",
+            "opp_def_rating": 112.2,
+            "opp_id": 1610612752,
+            "opp_off_rating": 115.2,
+            "opp_pace": 97.5,
+            "opp_tricode": "NYK",
+            "wl": ""
+          }
+        ],
+        "Thu": [],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Houston Rockets",
+      "team_id": 1610612745
+    },
+    {
+      "abbreviation": "LAL",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": false,
+            "matchup": "LAL @ ATL",
+            "opp_def_rating": 116.8,
+            "opp_id": 1610612737,
+            "opp_off_rating": 114.2,
+            "opp_pace": 99.5,
+            "opp_tricode": "ATL",
+            "wl": ""
+          }
+        ],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "LAL @ BKN",
+            "opp_def_rating": 115.5,
+            "opp_id": 1610612751,
+            "opp_off_rating": 112.5,
+            "opp_pace": 100.2,
+            "opp_tricode": "BKN",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Los Angeles Lakers",
+      "team_id": 1610612747
+    },
+    {
+      "abbreviation": "MIL",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": true,
+            "matchup": "MIL vs. WAS",
+            "opp_def_rating": 117.2,
+            "opp_id": 1610612764,
+            "opp_off_rating": 110.5,
+            "opp_pace": 100.5,
+            "opp_tricode": "WAS",
+            "wl": ""
+          }
+        ],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": false,
+            "matchup": "MIL @ CHA",
+            "opp_def_rating": 117.5,
+            "opp_id": 1610612766,
+            "opp_off_rating": 109.8,
+            "opp_pace": 100.2,
+            "opp_tricode": "CHA",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Milwaukee Bucks",
+      "team_id": 1610612749
+    },
+    {
+      "abbreviation": "NYK",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": true,
+            "matchup": "NYK vs. CHA",
+            "opp_def_rating": 117.5,
+            "opp_id": 1610612766,
+            "opp_off_rating": 109.8,
+            "opp_pace": 100.2,
+            "opp_tricode": "CHA",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": true,
+            "matchup": "NYK vs. PHI",
+            "opp_def_rating": 113.8,
+            "opp_id": 1610612755,
+            "opp_off_rating": 114.5,
+            "opp_pace": 98.8,
+            "opp_tricode": "PHI",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 2,
+      "name": "New York Knicks",
+      "team_id": 1610612752
+    },
+    {
+      "abbreviation": "PHI",
+      "b2b_count": 0,
+      "days": {
+        "Fri": [],
+        "Mon": [],
+        "Sat": [
+          {
+            "date": "Sun, 25 Oct 2026 00:00:00 GMT",
+            "day": "Sat",
+            "is_home": true,
+            "matchup": "PHI vs. IND",
+            "opp_def_rating": 114.2,
+            "opp_id": 1610612754,
+            "opp_off_rating": 116.5,
+            "opp_pace": 99.2,
+            "opp_tricode": "IND",
+            "wl": ""
+          }
+        ],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [],
+        "Wed": [
+          {
+            "date": "Thu, 22 Oct 2026 00:00:00 GMT",
+            "day": "Wed",
+            "is_home": false,
+            "matchup": "PHI @ CHI",
+            "opp_def_rating": 114.5,
+            "opp_id": 1610612741,
+            "opp_off_rating": 112.8,
+            "opp_pace": 99.8,
+            "opp_tricode": "CHI",
+            "wl": ""
+          }
+        ]
+      },
+      "games_count": 2,
+      "name": "Philadelphia 76ers",
+      "team_id": 1610612755
+    },
+    {
+      "abbreviation": "POR",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [],
+        "Mon": [
+          {
+            "date": "Tue, 20 Oct 2026 00:00:00 GMT",
+            "day": "Mon",
+            "is_home": false,
+            "matchup": "POR @ UTA",
+            "opp_def_rating": 115.8,
+            "opp_id": 1610612762,
+            "opp_off_rating": 112.2,
+            "opp_pace": 99.0,
+            "opp_tricode": "UTA",
+            "wl": ""
+          }
+        ],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [],
+        "Tue": [
+          {
+            "date": "Wed, 21 Oct 2026 00:00:00 GMT",
+            "day": "Tue",
+            "is_home": true,
+            "matchup": "POR vs. OKC",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612760,
+            "opp_off_rating": 116.8,
+            "opp_pace": 100.8,
+            "opp_tricode": "OKC",
+            "wl": ""
+          }
+        ],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Portland Trail Blazers",
+      "team_id": 1610612757
+    },
+    {
+      "abbreviation": "SAC",
+      "b2b_count": 1,
+      "days": {
+        "Fri": [
+          {
+            "date": "Sat, 24 Oct 2026 00:00:00 GMT",
+            "day": "Fri",
+            "is_home": true,
+            "matchup": "SAC vs. MIA",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612748,
+            "opp_off_rating": 112.2,
+            "opp_pace": 97.8,
+            "opp_tricode": "MIA",
+            "wl": ""
+          }
+        ],
+        "Mon": [],
+        "Sat": [],
+        "Sun": [],
+        "Thu": [
+          {
+            "date": "Fri, 23 Oct 2026 00:00:00 GMT",
+            "day": "Thu",
+            "is_home": true,
+            "matchup": "SAC vs. OKC",
+            "opp_def_rating": 111.2,
+            "opp_id": 1610612760,
+            "opp_off_rating": 116.8,
+            "opp_pace": 100.8,
+            "opp_tricode": "OKC",
+            "wl": ""
+          }
+        ],
+        "Tue": [],
+        "Wed": []
+      },
+      "games_count": 2,
+      "name": "Sacramento Kings",
+      "team_id": 1610612758
+    }
+  ],
+  "week": 1,
+  "week_end": "2026-10-25",
+  "week_start": "2026-10-20"
+}
