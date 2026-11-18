@@ -919,8 +919,6 @@ def get_weekly_schedule_analyzer(week: int, season: str = '2026-27') -> Dict[str
                     'opp_pace': opp_stats['PACE'],
                     'wl': '',
                 })
-                        'wl': '',
-                    })
 
             # Count games and B2B (before converting dates to strings)
             b2b_count = 0
