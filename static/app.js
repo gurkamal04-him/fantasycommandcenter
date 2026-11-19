@@ -812,8 +812,10 @@
   // Box Score
   // ===================================================================
   $('#bs-load')?.addEventListener('click', async () => {
-    const gameId = $('#bs-game-id').value.trim();
-    if (!gameId || gameId.length !== 10) return alert('Enter a valid 10-digit Game ID');
+    let gameId = $('#bs-game-id').value.trim();
+    if (!gameId) return alert('Enter a valid Game ID');
+    // Accept both 9-digit ESPN IDs and 10-digit NBA.com IDs
+    if (gameId.length !== 9 && gameId.length !== 10) return alert('Enter a valid 9-digit ESPN Game ID or 10-digit NBA.com Game ID');
     const results = $('#boxscore-results');
     const tbody = $('#boxscore-results tbody');
     const meta = $('#bs-meta');
