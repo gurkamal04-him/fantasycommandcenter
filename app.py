@@ -208,6 +208,172 @@ def nba_to_espn_id(nba_id: str) -> str:
         return ''
 
 
+def _parse_espn_player_row(row: dict, team_abbr: str) -> dict:
+    """
+    Parse a flat ESPN athlete stats row into the same dict shape used by
+    the advanced box score renderer.
+
+    ESPN keys (per team):
+      ['minutes', 'points', 'fieldGoalsMade-fieldGoalsAttempted',
+       'threePointFieldGoalsMade-threePointFieldGoalsAttempted',
+       'freeThrowsMade-freeGoalsAttempted', 'rebounds', 'assists',
+       'turnovers', 'steals', 'blocks', 'offensiveRebounds',
+       'defensiveRebounds', 'fouls', 'plusMinus']
+    """
+    def _to_int(v):
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return 0
+
+    def _split_pair(v):
+        """Split 'FGM-FGA' or '3PM-3PA' or 'FTM-FTA' into (made, att)."""
+        try:
+            s = str(v).strip()
+            if '-' in s:
+                a, b = s.split('-', 1)
+                return _to_int(a), _to_int(b)
+            return _to_int(s), 0
+        except Exception:
+            return 0, 0
+
+    fg_m, fg_a = _split_pair(row.get('fieldGoalsMade-fieldGoalsAttempted', '0-0'))
+    tp_m, tp_a = _split_pair(row.get('threePointFieldGoalsMade-threePointFieldGoalsAttempted', '0-0'))
+    ft_m, ft_a = _split_pair(row.get('freeThrowsMade-freeGoalsAttempted', '0-0'))
+
+    minutes = _to_int(row.get('minutes', 0))
+    pts = _to_int(row.get('points', 0))
+    reb = _to_int(row.get('rebounds', 0))
+    ast = _to_int(row.get('assists', 0))
+    tov = _to_int(row.get('turnovers', 0))
+    stl = _to_int(row.get('steals', 0))
+    blk = _to_int(row.get('blocks', 0))
+    oreb = _to_int(row.get('offensiveRebounds', 0))
+    dreb = _to_int(row.get('defensiveRebounds', 0))
+    pf = _to_int(row.get('fouls', 0))
+    pm = _to_int(row.get('plusMinus', 0))
+
+    fga = fg_a if fg_a else None
+    tpa = tp_a if tp_a else None
+    fta = ft_a if ft_a else None
+
+    # Usage% and true shooting are not available from ESPN; leave as None so
+    # the renderer shows them as N/A instead of a fabricated number.
+    return {
+        'playerId': None,
+        'teamId': None,
+        'teamAbbrev': team_abbr,
+        'playerName': '',  # filled in by caller from athlete metadata
+        'minutes': minutes,
+        'points': pts,
+        'rebounds': reb,
+        'assists': ast,
+        'turnovers': tov,
+        'steals': stl,
+        'blocks': blk,
+        'offensiveRebounds': oreb,
+        'defensiveRebounds': dreb,
+        'fouls': pf,
+        'plusMinus': pm,
+        'fieldGoalsMade': fg_m,
+        'fieldGoalsAttempted': fga,
+        'threePointFieldGoalsMade': tp_m,
+        'threePointFieldGoalsAttempted': tpa,
+        'freeThrowsMade': ft_m,
+        'freeThrowsAttempted': fta,
+        'usagePct': None,
+        'trueShootingPct': None,
+        'assistTurnoverRatio': None,
+        'assistCreation': None,
+        'turnoverCreation': None,
+        'source': 'espn',
+    }
+
+
+@lru_cache(maxsize=32)
+def get_espn_box_score(game_id: str) -> Dict[str, Any]:
+    """
+    Get a full box score from the ESPN public API.
+
+    ESPN's /summary endpoint returns per-player stats inside
+    boxscore.players[].statistics[0].athletes[] as flat string arrays
+    keyed by the same columns for every player on a team (MIN, PTS,
+    FG made-attempted, 3PT, FT, REB, AST, TO, STL, BLK, OREB, DREB, PF, +/-).
+
+    Returns a dict with 'players' (list of per-player stat dicts),
+    'home_team', 'away_team', and 'source'.
+    """
+    try:
+        import requests
+        espn_id = str(game_id)
+        # If we received an NBA.com ID, convert it
+        if len(espn_id) == 10 and espn_id.isdigit():
+            espn_id = nba_to_espn_id(espn_id)
+
+        url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={espn_id}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        boxscore = data.get('boxscore', {})
+        teams = boxscore.get('teams', [])
+
+        home_team = None
+        away_team = None
+        for t in teams:
+            team = t.get('team', {})
+            if team.get('homeAway') == 'home' or (home_team is None and team.get('id')):
+                home_team = team
+            if team.get('homeAway') == 'away':
+                away_team = team
+
+        # Team-level stats (for usage calc fallback)
+        team_stats = {}
+        for t in teams:
+            team = t.get('team', {})
+            abbr = team.get('abbreviation')
+            tm = {}
+            for s in t.get('statistics', []):
+                for k, v in zip(s.get('keys', []), s.get('displayValues', []) or []):
+                    tm[k] = v
+            team_stats[abbr] = tm
+
+        players = []
+        for team_block in boxscore.get('players', []):
+            team = team_block.get('team', {})
+            abbr = team.get('abbreviation', '')
+            for stat_group in team_block.get('statistics', []):
+                keys = stat_group.get('keys', [])
+                for athlete_row in stat_group.get('athletes', []):
+                    stats = athlete_row.get('stats') or []
+                    if not stats:
+                        continue  # DNP
+                    row = dict(zip(keys, stats))
+                    parsed = _parse_espn_player_row(row, abbr)
+                    # Attach athlete metadata (name, id, position, jersey)
+                    athlete = athlete_row.get('athlete', {}) or {}
+                    parsed['playerName'] = athlete.get('displayName') or athlete.get('shortName') or ''
+                    parsed['playerId'] = athlete.get('id')
+                    parsed['position'] = athlete.get('position', {}).get('abbreviation', '') or athlete.get('position', {}).get('name', '')
+                    parsed['jersey'] = athlete.get('jersey', '')
+                    parsed['starter'] = bool(athlete_row.get('starter', False))
+                    parsed['didNotPlay'] = bool(athlete_row.get('didNotPlay', False))
+                    parsed['reason'] = athlete_row.get('reason', '')
+                    players.append(parsed)
+                break  # only first stat group per team
+
+        return {
+            'players': players,
+            'home_team': home_team,
+            'away_team': away_team,
+            'team_stats': team_stats,
+            'source': 'espn',
+        }
+    except Exception as e:
+        print(f"Error fetching ESPN box score for game_id={game_id}: {e}")
+        return {'players': [], 'source': 'espn', 'error': str(e)}
+
+
 @lru_cache(maxsize=64)
 def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
     """
