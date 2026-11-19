@@ -603,6 +603,7 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
 
             rows.append({
                 'GAME_DATE': game_date,
+                'gameId': event.get('id'),
                 'homeTeam_teamId': int(str(home_team.get('id', '0'))),
                 'awayTeam_teamId': int(str(away_team.get('id', '0'))),
                 'homeTeam_teamTricode': home_team.get('abbreviation', ''),
@@ -761,37 +762,49 @@ def calc_usage_pct(row: pd.Series, team_row: pd.Series = None) -> float:
     """
     Calculate Usage% using the standard formula:
     100 * ((FGA + 0.44 * FTA + TOV) * (Tm MP / 5)) / (MP * (Tm FGA + 0.44 * Tm FTA + Tm TOV))
+
+    Handles multiple column naming conventions:
+    - NBA.com V2: FGA, FTA, TOV, MIN
+    - NBA.com V3: fieldGoalsAttempted, freeThrowsAttempted, turnovers, minutes
+    - ESPN: fga, fta, tov, minutes (from _parse_espn_player_row)
     """
-    try:
-        # Player stats
-        fga = float(row.get('FGA', row.get('fga', 0)) or 0)
-        fta = float(row.get('FTA', row.get('fta', 0)) or 0)
-        tov = float(row.get('TOV', row.get('tov', 0)) or 0)
-        mp = float(row.get('MIN', row.get('minutes', row.get('MP', 0))) or 0)
-
-        if mp <= 0:
-            return 0.0
-
-        # Team stats (from team_row if available, else estimate)
-        if team_row is not None:
-            tm_fga = float(team_row.get('FGA', team_row.get('fga', 0)) or 0)
-            tm_fta = float(team_row.get('FTA', team_row.get('fta', 0)) or 0)
-            tm_tov = float(team_row.get('TOV', team_row.get('tov', 0)) or 0)
-            tm_mp = float(team_row.get('MIN', team_row.get('minutes', 240)) or 240)
-        else:
-            # Rough estimates: team takes ~85 FGA, ~25 FTA, ~15 TOV per game, 240 team minutes
-            tm_fga, tm_fta, tm_tov, tm_mp = 85, 25, 15, 240
-
-        numerator = (fga + 0.44 * fta + tov) * (tm_mp / 5)
-        denominator = mp * (tm_fga + 0.44 * tm_fta + tm_tov)
-
-        if denominator <= 0:
-            return 0.0
-
-        usage = 100 * numerator / denominator
-        return min(100, max(0, usage))
-    except Exception:
+    def _get_stat(row, keys):
+        for k in keys:
+            v = row.get(k)
+            if v is not None and not (isinstance(v, float) and v != v):
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    continue
         return 0.0
+
+    # Player stats - try multiple column naming conventions
+    fga = _get_stat(row, ['FGA', 'fga', 'fieldGoalsAttempted', 'fieldGoalsAttempted'])
+    fta = _get_stat(row, ['FTA', 'fta', 'freeThrowsAttempted', 'freeThrowsAttempted'])
+    tov = _get_stat(row, ['TOV', 'tov', 'turnovers', 'turnovers'])
+    mp = _get_stat(row, ['MIN', 'min', 'minutes', 'MP'])
+
+    if mp <= 0:
+        return 0.0
+
+    # Team stats (from team_row if available, else estimate)
+    if team_row is not None:
+        tm_fga = _get_stat(team_row, ['FGA', 'fga', 'fieldGoalsAttempted'])
+        tm_fta = _get_stat(team_row, ['FTA', 'fta', 'freeThrowsAttempted'])
+        tm_tov = _get_stat(team_row, ['TOV', 'tov', 'turnovers'])
+        tm_mp = _get_stat(team_row, ['MIN', 'min', 'minutes', 'MP']) or 240
+    else:
+        # Rough estimates: team takes ~85 FGA, ~25 FTA, ~15 TOV per game, 240 team minutes
+        tm_fga, tm_fta, tm_tov, tm_mp = 85, 25, 15, 240
+
+    numerator = (fga + 0.44 * fta + tov) * (tm_mp / 5)
+    denominator = mp * (tm_fga + 0.44 * tm_fta + tm_tov)
+
+    if denominator <= 0:
+        return 0.0
+
+    usage = 100 * numerator / denominator
+    return min(100, max(0, usage))
 
 
 def get_shooting_splits(row: pd.Series) -> Dict[str, str]:
@@ -1144,7 +1157,7 @@ def box_score(game_id):
             'fg3m': row.get('threePointersMade', row.get('FG3M', 0)), 'fg3a': row.get('threePointersAttempted', row.get('FG3A', 0)),
             'ftm': row.get('freeThrowsMade', row.get('FTM', 0)), 'fta': row.get('freeThrowsAttempted', row.get('FTA', 0)),
             'fps': round(fps, 1),
-            'usage_pct': round(float(row.get('usagePercentage', 0)) * 100, 1),
+            'usage_pct': round(usage, 1),
             'splits': splits,
             'plus_minus': row.get('plusMinusPoints', row.get('plusMinus', row.get('PLUS_MINUS', 0))),
         })
