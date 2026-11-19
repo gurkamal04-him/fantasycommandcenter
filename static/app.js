@@ -1005,13 +1005,13 @@
     const meta = $('#rk-meta');
     const wrap = $('#rankings-results');
     show(wrap);
-    tbody.innerHTML = '<tr><td colspan="12" class="loading">Loading rankings…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="loading">Loading rankings…</td></tr>';
     meta.textContent = '';
     try {
       let url = `/api/player-rankings?period=${encodeURIComponent(period)}&season=${encodeURIComponent(season)}`;
       if (period === 'custom') {
         if (!startDate || !endDate) {
-          tbody.innerHTML = '<tr><td colspan="12" class="empty">Please select a start and end date for the custom range</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="13" class="empty">Please select a start and end date for the custom range</td></tr>';
           return;
         }
         url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
@@ -1021,7 +1021,7 @@
       meta.textContent = `Period: ${data.period_label || period} | Season: ${season} | Players: ${rkPlayersData.length}`;
       sortAndRenderRankings();
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="12" class="empty">Failed to load rankings</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" class="empty">Failed to load rankings</td></tr>';
       console.error(e);
     }
   });
@@ -1029,7 +1029,7 @@
   function sortAndRenderRankings() {
     const tbody = $('#rk-tbody');
     if (!rkPlayersData.length) {
-      tbody.innerHTML = '<tr><td colspan="12" class="empty">No ranking data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" class="empty">No ranking data</td></tr>';
       return;
     }
 
@@ -1052,6 +1052,7 @@
         <td class="player-name">${p.name}</td>
         <td class="team-abbr">${p.team}</td>
         <td class="rk-gms num">${p.games}</td>
+        <td class="num">${p.avg_min ?? 0}</td>
         <td class="num">${p.pts}</td>
         <td class="num">${p.reb}</td>
         <td class="num">${p.ast}</td>
@@ -1107,12 +1108,13 @@
   });
 
   function exportRankingsCSV(players) {
-    const headers = ['Rank', 'Player', 'Team', 'Gms', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', 'Usage%', 'FPS', 'Total FPS'];
+    const headers = ['Rank', 'Player', 'Team', 'Gms', 'MIN', 'PTS', 'REB', 'AST', 'STL', 'BLK', 'TOV', 'Usage%', 'FPS', 'Total FPS'];
     const rows = players.map((p, idx) => [
       idx + 1,
       p.name,
       p.team,
       p.games,
+      p.avg_min ?? 0,
       p.pts,
       p.reb,
       p.ast,
@@ -1169,8 +1171,8 @@
       const card = $(`#ss-card-${id}`);
       card.innerHTML = `
         <h4>${p.name} (${p.team})</h4>
-        <div class="ss-stat-row"><span class="ss-stat-label">7-Day Avg FPS</span><span class="ss-stat-value accent">${fmt(p.avg_fps)}</span></div>
-        <div class="ss-stat-row"><span class="ss-stat-label">7-Day Avg Usage%</span><span class="ss-stat-value warn">${fmt(p.avg_usage)}%</span></div>
+        <div class="ss-stat-row"><span class="ss-stat-label">7-Day Avg FPS</span><span class="ss-stat-value accent">${fmt(p.avg_fps_7)}</span></div>
+        <div class="ss-stat-row"><span class="ss-stat-label">7-Day Avg Usage%</span><span class="ss-stat-value warn">${fmt(p.avg_usage_7)}%</span></div>
         <div class="ss-stat-row"><span class="ss-stat-label">Next Matchup</span><span class="ss-stat-value">${p.next_matchup || 'TBD'}</span></div>
         <div class="ss-stat-row"><span class="ss-stat-label">Opp Pace</span><span class="ss-stat-value">${fmt(p.opp_pace)}</span></div>
         <div class="ss-stat-row"><span class="ss-stat-label">Opp Def Rtg</span><span class="ss-stat-value">${fmt(p.opp_def_rating)}</span></div>
