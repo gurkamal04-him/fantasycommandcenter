@@ -7,31 +7,14 @@ import os
 import json
 import math
 import time
-import os
 import unicodedata
 from datetime import datetime, date, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Any, Tuple
 
 import pandas as pd
+import requests
 from flask import Flask, render_template, request, jsonify, send_from_directory
-
-from nba_api.stats.endpoints import (
-    CommonAllPlayers,
-    PlayerGameLog,
-    TeamGameLog,
-    LeagueGameLog,
-    LeagueDashTeamStats,
-    ScheduleLeagueV2,
-    TeamDashboardByGeneralSplits,
-    ScoreboardV3,
-    BoxScoreTraditionalV3,
-    BoxScoreAdvancedV3,
-    BoxScoreMiscV3,
-    BoxScoreUsageV3,
-    PlayerCareerStats,
-)
-from nba_api.stats.static import teams, players
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
@@ -56,16 +39,58 @@ SCORING = {
 # =====================================================================
 
 @lru_cache(maxsize=32)
-def get_all_players() -> List[Dict]:
-    """Get all current season players with team info"""
-    df = CommonAllPlayers(is_only_current_season=1).get_data_frames()[0]
-    return df[['PERSON_ID', 'DISPLAY_FIRST_LAST', 'TEAM_ID', 'TEAM_ABBREVIATION']].to_dict('records')
+def get_all_teams() -> List[Dict]:
+    """Get all NBA teams from ESPN public API."""
+    try:
+        resp = requests.get(
+            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams",
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        teams_list = []
+        for sport in data.get('sports', []):
+            for league in sport.get('leagues', []):
+                for team in league.get('teams', []):
+                    t = team.get('team', {})
+                    teams_list.append({
+                        'id': int(t.get('id', 0)),
+                        'abbreviation': t.get('abbreviation', ''),
+                        'full_name': t.get('displayName', ''),
+                        'name': t.get('name', ''),
+                        'location': t.get('location', ''),
+                    })
+        return teams_list
+    except Exception as e:
+        print(f"Error fetching all teams from ESPN: {e}")
+        return []
 
 
 @lru_cache(maxsize=32)
-def get_all_teams() -> List[Dict]:
-    """Get all NBA teams"""
-    return teams.get_teams()
+def get_all_players() -> List[Dict]:
+    """Get all current-season players with team info from ESPN rosters."""
+    teams_list = get_all_players.__wrapped__() if hasattr(get_all_players, '__wrapped__') else None
+    all_teams = get_all_teams()
+    players = []
+    for team in all_teams:
+        tid = team['id']
+        try:
+            resp = requests.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{tid}/roster",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            for athlete in data.get('athletes', []):
+                players.append({
+                    'PERSON_ID': int(athlete.get('id', 0)),
+                    'DISPLAY_FIRST_LAST': athlete.get('displayName', ''),
+                    'TEAM_ID': tid,
+                    'TEAM_ABBREVIATION': team['abbreviation'],
+                })
+        except Exception as e:
+            print(f"Error fetching roster for team {tid}: {e}")
+    return players
 
 
 @lru_cache(maxsize=64)
