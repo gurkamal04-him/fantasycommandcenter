@@ -185,7 +185,6 @@ def get_team_id(abbrev: str) -> Optional[int]:
     return None
 
 
-@lru_cache(maxsize=64)
 @lru_cache(maxsize=128)
 def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 50) -> pd.DataFrame:
     """Get player game log for current season using ESPN schedule + box scores.
@@ -232,6 +231,21 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
                     if str(p.get('playerId')) == player_id_str:
                         # Get game date from event
                         p['gameDate'] = event.get('date', '')[:10]
+                        # Build matchup string from event competitors
+                        comps = competition.get('competitors', [])
+                        home_abbr = away_abbr = ''
+                        for c in comps:
+                            t = c.get('team', {})
+                            abbr = t.get('abbreviation', '')
+                            if c.get('homeAway') == 'home':
+                                home_abbr = abbr
+                            elif c.get('homeAway') == 'away':
+                                away_abbr = abbr
+                        p_team = p.get('teamAbbrev', '')
+                        if home_abbr and away_abbr:
+                            opp = away_abbr if p_team == home_abbr else home_abbr
+                            p['matchup'] = f"{p_team} vs {opp}"
+                            p['opp_abbr'] = opp
                         games.append(p)
                         break
                 if len(games) >= n_games:
@@ -245,8 +259,9 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
         for g in games:
             row = {
                 'PERSON_ID': player_id,
-                'GAME_DATE': g.get('gameDate', ''),  # Not available, would need to fetch from event
-                'MATCHUP': f"{g.get('teamAbbrev')} vs OPP",  # Not directly available
+                'TEAM_ABBREVIATION': g.get('teamAbbrev', ''),
+                'GAME_DATE': g.get('gameDate', ''),
+                'MATCHUP': g.get('matchup', ''),
                 'WL': 'W' if g.get('plusMinus', 0) > 0 else 'L',
                 'MIN': g.get('minutes', 0),
                 'PTS': g.get('points', 0),
@@ -363,6 +378,7 @@ def get_league_team_stats(measure_type: str = 'Advanced', season: str = '2026-27
 
 
 @lru_cache(maxsize=64)
+@lru_cache(maxsize=64)
 def get_team_pace_defense(team_id: int, season: str = '2026-27') -> Dict[str, float]:
     """Get team pace and defensive rating from ESPN box scores.
 
@@ -377,8 +393,77 @@ def get_team_pace_defense(team_id: int, season: str = '2026-27') -> Dict[str, fl
         df = df[df['status'].str.contains('FINAL', na=False, case=False)]
         if df.empty:
             return {'PACE': 98.0, 'DEF_RATING': 112.0}
-        # Approximate pace from box scores (possession estimate)
-        # For now return league averages — advanced metrics not available via ESPN
+
+        # Compute actual pace and defensive rating from box scores
+        paces = []
+        def_ratings = []
+        for _, row in df.iterrows():
+            gid = str(row.get('gameId') or row.get('event_id') or '')
+            if not gid:
+                continue
+            box = get_espn_box_score(gid)
+            team_stats = box.get('team_stats', {})
+            # Find this team's stats in the box score
+            abbr = row.get('homeTeam_teamTricode', '') or row.get('awayTeam_teamTricode', '')
+            tm = team_stats.get(abbr, {})
+            if not tm:
+                continue
+            # ESPN team stats use displayValue strings like "98" for pace
+            pace_val = tm.get('pace', tm.get('Pace', tm.get('PacePer40')))
+            def_val = tm.get('defensiveRating', tm.get('defRating', tm.get('DefRating')))
+            if pace_val:
+                try:
+                    paces.append(float(pace_val))
+                except (ValueError, TypeError):
+                    pass
+            if def_val:
+                try:
+                    def_ratings.append(float(def_val))
+                except (ValueError, TypeError):
+                    pass
+
+        if paces:
+            return {
+                'PACE': round(sum(paces) / len(paces), 1),
+                'DEF_RATING': round(sum(def_ratings) / len(def_ratings), 1) if def_ratings else 112.0,
+            }
+
+        # ESPN doesn't expose pace/defensive rating. Estimate from box score:
+        #   PACE = (Tm FGA + 0.44*Tm FTA + Tm TOV) / (Tm MP / 5)
+        #   DEF_RATING = 100 * (Opp PTS / (Opp FGA + 0.44*Opp FTA + Opp TOV))
+        # We use the team's own stats as a proxy (team pace ≈ game pace).
+        team_abbr = ''
+        for _, r0 in df.head(1).iterrows():
+            team_abbr = r0.get('homeTeam_teamTricode', '') or r0.get('awayTeam_teamTricode', '')
+        pace_est = []
+        def_est = []
+        for _, row in df.iterrows():
+            gid = str(row.get('gameId') or '')
+            if not gid:
+                continue
+            box = get_espn_box_score(gid)
+            team_stats = box.get('team_stats', {})
+            tm = team_stats.get(team_abbr, {})
+            if not tm:
+                continue
+            fga = _parse_pair_num(tm.get('fieldGoalsMade-fieldGoalsAttempted', '0-0'), 1)
+            fta = _parse_pair_num(tm.get('freeThrowsMade-freeThrowsAttempted', '0-0'), 1)
+            tov = _to_num(tm.get('turnovers', '0'))
+            if fga is None or fta is None:
+                continue
+            # possessions per 5 minutes
+            poss = fga + 0.44 * fta + tov
+            if poss > 0:
+                pace_est.append(poss)  # possessions per 48 min ≈ pace
+            # defensive rating: points allowed per 100 possessions
+            opp_pts = _to_num(row.get('homeTeam_score') if row.get('homeTeam_teamTricode') == team_abbr else row.get('awayTeam_score'))
+            if opp_pts is not None and poss > 0:
+                def_est.append(100 * opp_pts / poss)
+        if pace_est:
+            return {
+                'PACE': round(sum(pace_est) / len(pace_est), 1),
+                'DEF_RATING': round(sum(def_est) / len(def_est), 1) if def_est else 112.0,
+            }
         return {'PACE': 98.0, 'DEF_RATING': 112.0}
     except Exception as e:
         print(f"Error fetching team pace/def: {e}")
@@ -404,6 +489,33 @@ def parse_game_date(date_str: str) -> date:
 # share a fixed offset (verified across 2026-11-16 through 2026-11-19):
 #   nba_id = espn_id - 379309749
 ESPN_NBA_ID_OFFSET = 379309749
+
+
+def _to_num(v) -> Optional[float]:
+    """Parse a numeric value from an ESPN stat displayValue string."""
+    if v is None:
+        return None
+    try:
+        return float(str(v).replace('%', '').strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_pair_num(v, idx: int = 1) -> Optional[float]:
+    """Parse the attempted half of an ESPN 'made-attempted' pair string.
+
+    e.g. '40-88' -> 88 (idx=1) or '0-0' -> None (no attempts).
+    """
+    if v is None:
+        return None
+    try:
+        parts = str(v).strip().split('-')
+        if len(parts) < 2:
+            return None
+        att = float(parts[idx])
+        return att if att > 0 else None
+    except (ValueError, TypeError, IndexError):
+        return None
 
 
 def espn_to_nba_id(espn_id: str) -> str:
@@ -602,7 +714,6 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
         return {'players': [], 'source': 'espn', 'error': str(e)}
 
 
-@lru_cache(maxsize=64)
 @lru_cache(maxsize=64)
 def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
     """
@@ -1450,10 +1561,17 @@ def start_sit():
         team_abbr = gl.iloc[0].get('TEAM_ABBREVIATION', '') if len(gl) else ''
         team_id = get_team_id(team_abbr) if team_abbr else None
 
-        # Matchup data
-        next_game = gl.iloc[0] if len(gl) else None
-        matchup_str = next_game.get('MATCHUP', '') if next_game is not None else ''
-        opp_abbr = matchup_str.split()[-1] if matchup_str else ''
+        # Matchup data - use the actual matchup string from the gamelog
+        matchup_str = gl.iloc[0].get('MATCHUP', '') if len(gl) else ''
+        opp_abbr = gl.iloc[0].get('opp_abbr', '') if len(gl) else ''
+
+        # Fallback: parse opponent from matchup string if opp_abbr is empty
+        if not opp_abbr and matchup_str:
+            # Matchup format: "TEAM vs OPP" or "TEAM @ OPP"
+            parts = matchup_str.replace('@', ' ').replace('vs', ' ').split()
+            if parts:
+                opp_abbr = parts[-1]
+
         opp_id = get_team_id(opp_abbr) if opp_abbr else None
 
         pace_def = get_team_pace_defense(opp_id) if opp_id else {'PACE': 98.0, 'DEF_RATING': 112.0}
@@ -1470,6 +1588,7 @@ def start_sit():
             'name': name,
             'player_id': pid,
             'team': team_abbr,
+            'opponent': opp_abbr,
             'recent_games': len(recent),
             'avg_fps_7': round(avg_fps, 1),
             'avg_usage_7': round(avg_usage, 1),
