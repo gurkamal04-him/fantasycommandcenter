@@ -183,6 +183,31 @@ def parse_game_date(date_str: str) -> date:
 # ESPN Public API Helpers
 # =====================================================================
 
+# ESPN and NBA.com use different game ID schemes. ESPN IDs are 9 digits
+# (e.g. 401910003); NBA.com IDs are 10 digits (e.g. 0022600254). The two
+# share a fixed offset (verified across 2026-11-16 through 2026-11-19):
+#   nba_id = espn_id - 379309749
+ESPN_NBA_ID_OFFSET = 379309749
+
+
+def espn_to_nba_id(espn_id: str) -> str:
+    """Convert an ESPN game ID to the equivalent NBA.com game ID."""
+    try:
+        nba = int(espn_id) - ESPN_NBA_ID_OFFSET
+        return f"{nba:010d}"
+    except (ValueError, TypeError):
+        return ''
+
+
+def nba_to_espn_id(nba_id: str) -> str:
+    """Convert an NBA.com game ID to the equivalent ESPN game ID."""
+    try:
+        espn = int(nba_id) + ESPN_NBA_ID_OFFSET
+        return str(espn)
+    except (ValueError, TypeError):
+        return ''
+
+
 @lru_cache(maxsize=64)
 def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
     """
@@ -678,6 +703,7 @@ def scoreboard():
             away = competition['competitors'][1]
             games.append({
                 'gameId': event.get('id'),
+                'nbaGameId': espn_to_nba_id(event.get('id', '')),
                 'home': {
                     'teamId': home.get('id'),
                     'teamTricode': home['team']['abbreviation'],
