@@ -9,6 +9,7 @@ import math
 import time
 import threading
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Any, Tuple
@@ -904,7 +905,8 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
     Returns top 200 players with avg FPS, total FPS, and usage over the period.
 
     Uses ESPN schedule + box scores since there's no direct player gamelog endpoint.
-    Optimized: fetches team schedules and box scores in bulk rather than per-player.
+    Optimized: fetches each unique game's box score ONCE via get_box_score_cached(),
+    then builds per-player stats from the cached box scores.
     """
     try:
         all_players = get_all_players()
@@ -938,44 +940,62 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             if team_id and team_id not in team_schedules:
                 team_schedules[team_id] = get_espn_team_schedule(team_id, season)
 
-        # For each player, filter their team's games to completed ones
-        rankings = []
-
-        # Limit to players with sufficient games (performance)
-        for p in all_players:
-            player_id = p.get('PERSON_ID')
-            team_id = p.get('TEAM_ID')
-            if not player_id or not team_id:
-                continue
-
-            team_df = team_schedules.get(team_id)
+        # Collect all unique completed game IDs with their dates
+        # Map: game_id -> game_date
+        game_dates = {}
+        for team_id, team_df in team_schedules.items():
             if team_df is None or team_df.empty:
                 continue
+            completed = team_df[team_df['status'].str.contains('FINAL', na=False, case=False)]
+            for _, row in completed.iterrows():
+                gid = str(row.get('gameId') or row.get('event_id') or '')
+                if gid:
+                    gdate = str(row.get('GAME_DATE', ''))[:10]
+                    game_dates[gid] = gdate
 
-            # Only completed games
-            completed_games = team_df[team_df['status'].str.contains('FINAL', na=False, case=False)]
-            if completed_games.empty:
+        if not game_dates:
+            return []
+
+        # Fetch each unique game's box score ONCE using the cache, in parallel
+        # Build player_id -> list of game stat dicts
+        from collections import defaultdict
+        player_games: Dict[int, List[Dict]] = defaultdict(list)
+
+        def fetch_one(gid_gdate):
+            gid, gdate = gid_gdate
+            box = get_box_score_cached(gid)
+            out = []
+            for player in box.get('players', []):
+                pid = player.get('playerId')
+                if pid is None:
+                    continue
+                pdata = dict(player)
+                pdata['gameDate'] = gdate
+                out.append((int(pid), pdata))
+            return out
+
+        # Use thread pool for I/O-bound HTTP fetches (ESPN API is the bottleneck)
+        with ThreadPoolExecutor(max_workers=24) as executor:
+            futures = {executor.submit(fetch_one, item): item for item in game_dates.items()}
+            for fut in as_completed(futures):
+                try:
+                    for pid, pdata in fut.result():
+                        player_games[pid].append(pdata)
+                except Exception as e:
+                    print(f"Error fetching box score: {e}")
+
+        # Now compute rankings for each player
+        rankings = []
+        for p in all_players:
+            player_id = p.get('PERSON_ID')
+            if not player_id:
                 continue
 
-            # Get player's games from box scores (limit to reduce API calls)
-            games = []
-            for _, event_row in completed_games.iterrows():
-                if len(games) >= 50:  # Limit for performance
-                    break
-                espn_game_id = event_row.get('gameId') or event_row.get('event_id')
-                if not espn_game_id:
-                    continue
-                box = get_espn_box_score(espn_game_id)
-                for player in box.get('players', []):
-                    if str(player.get('playerId')) == str(player_id):
-                        player['gameDate'] = str(event_row.get('GAME_DATE', ''))[:10]
-                        games.append(player)
-                        break
-
+            games = player_games.get(int(player_id))
             if not games:
                 continue
 
-            # Convert to DataFrame
+            # Convert to DataFrame rows
             rows = []
             for g in games:
                 row = {
