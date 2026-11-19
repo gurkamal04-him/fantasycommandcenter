@@ -387,11 +387,14 @@
   function renderScheduleTable(results) {
     const tbody = $('#sched-table tbody');
     tbody.innerHTML = results.map(r => {
-      const gamesHtml = r.sched.games.map(g => `
-        <span class="sched-game${(g.date - (r.sched.games[r.sched.games.indexOf(g)-1]?.date || g.date)).days <= 1 ? ' b2b' : ''}">
+      const gamesHtml = r.sched.games.map((g, i) => {
+        const prev = r.sched.games[i - 1];
+        const isB2b = prev && (new Date(g.date) - new Date(prev.date)) / 86400000 <= 1;
+        return `
+        <span class="sched-game${isB2b ? ' b2b' : ''}">
           ${new Date(g.date).toLocaleDateString([], {month:'short',day:'numeric'})} ${g.matchup}
         </span>
-      `).join('') || '—';
+      `}).join('') || '—';
       return `
         <tr>
           <td><span class="team-abbr">${r.team.abbreviation}</span> ${r.team.full_name}</td>

@@ -750,6 +750,17 @@ def get_team_schedule_analysis(team_id: int, days_ahead: int = 7, season: str = 
         return {'team_id': team_id, 'games_count': 0, 'games': [], 'b2b_count': 0, 'avg_rest': 0, 'rest_days': []}
 
 
+def parse_date(value):
+    """Parse a date value (date, datetime, or ISO string) into a date object."""
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        return datetime.fromisoformat(value).date()
+    return value
+
+
 @lru_cache(maxsize=64)
 def get_box_score(game_id: str) -> Dict[str, pd.DataFrame]:
     """Get full box score data for a game from ESPN public API.
@@ -1549,13 +1560,15 @@ def ros_heatmap():
         for w in range(weeks):
             week_start = today + timedelta(days=w*7)
             week_end = week_start + timedelta(days=6)
-            week_games = [g for g in sched['games'] if week_start <= g['date'] <= week_end]
+            week_games = [g for g in sched['games']
+                          if week_start <= parse_date(g['date']) <= week_end]
             weekly.append({
                 'week': w + 1,
                 'start': str(week_start),
                 'end': str(week_end),
                 'games': len(week_games),
-                'b2b': sum(1 for i in range(1, len(week_games)) if (week_games[i]['date'] - week_games[i-1]['date']).days <= 1)
+                'b2b': sum(1 for i in range(1, len(week_games))
+                       if (parse_date(week_games[i]['date']) - parse_date(week_games[i-1]['date'])).days <= 1)
             })
 
         heatmap.append({
