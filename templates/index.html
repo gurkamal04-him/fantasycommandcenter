@@ -559,6 +559,54 @@
   <p class="note">Method: the final point margin is modeled as a normal distribution centered on the difference in projected finals, with variance equal to the combined player-games remaining times the squared per-game spread. Games already played are locked in through the current points. It is an estimate, so update the numbers as the week goes.</p>
 </section>
 
+<!-- =================================================================== -->
+<!-- MINUTES SLIDER / PER-36 PROJECTION                                    -->
+<!-- =================================================================== -->
+<section id="minutes" class="page" aria-labelledby="minutes-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Per-36 Projection Tool</div>
+    <h1 id="minutes-title">Minutes Slider</h1>
+    <p class="sub">Enter a player name, then drag the slider to see projected fantasy points at any minute level based on per-36-minute rates.</p>
+  </header>
+
+  <div class="controls-row">
+    <div class="field" style="flex: 1; min-width: 280px;">
+      <label for="ms-player">Player</label>
+      <input id="ms-player" type="text" placeholder="e.g., Nikola Jokić" autocomplete="off">
+      <div class="autocomplete" id="ms-ac" hidden></div>
+    </div>
+    <button class="btn btn-primary" id="ms-load">Load Projection</button>
+  </div>
+
+  <div class="panel" id="minutes-results" hidden>
+    <div class="ms-header" id="ms-header"></div>
+
+    <div class="ms-slider-wrap">
+      <div class="ms-slider-row">
+        <label for="ms-minutes">Minutes per Game</label>
+        <output id="ms-minutes-val" class="ms-minutes-output">24</output>
+      </div>
+      <div class="ms-input-row">
+        <input id="ms-minutes" type="range" min="0" max="48" step="0.5" value="24">
+        <input id="ms-minutes-input" type="text" placeholder="e.g., 38:51 or 38.5" style="width: 120px;" title="Enter minutes as decimal (38.5) or mm:ss (38:51)">
+      </div>
+      <div class="ms-ticks">
+        <span>0</span><span>6</span><span>12</span><span>18</span><span>24</span><span>30</span><span>36</span><span>42</span><span>48</span>
+      </div>
+    </div>
+
+    <div class="ms-projection" id="ms-projection">
+      <div class="ms-big-fps">
+        <span class="ms-fps-val" id="ms-fps-val">--</span>
+        <span class="ms-fps-label">FPS</span>
+      </div>
+      <div class="ms-breakdown" id="ms-breakdown"></div>
+    </div>
+
+    <div class="ms-stats" id="ms-stats"></div>
+  </div>
+</section>
+
 {% endblock %}
 
 {% block scripts %}

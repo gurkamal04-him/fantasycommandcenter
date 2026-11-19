@@ -1195,16 +1195,24 @@ def send_static(path):
 
 @app.route('/api/players/search')
 def search_players():
-    """Search players by name. Supports 1+ char prefix for dropdown population."""
+    """Search players by name. Supports 1+ char prefix for dropdown population.
+
+    Query params:
+    - q: search query (default: empty returns all players)
+    - limit: max results (default: 50, max: 500)
+    """
     q = request.args.get('q', '').lower().strip()
-    # Allow 1-character queries so the dropdown fills as soon as typing begins
-    if len(q) < 1:
-        return jsonify([])
+    limit = min(request.args.get('limit', 50, type=int), 500)
     all_players = get_all_players()
+
+    if not q:
+        # Empty query returns all players (up to limit)
+        return jsonify(all_players[:500])
+
     # Exact/first-name matches first, then any substring match
     exact = [p for p in all_players if p['DISPLAY_FIRST_LAST'].lower().startswith(q)]
     partial = [p for p in all_players if q in p['DISPLAY_FIRST_LAST'].lower() and p not in exact]
-    results = (exact + partial)[:50]
+    results = (exact + partial)[:limit]
     return jsonify(results)
 
 
@@ -1998,6 +2006,78 @@ def win_projector():
         'proj_per_game': round(proj_per_game, 1),
         'my_rem': my_rem,
         'opp_rem': opp_rem,
+    })
+
+
+@app.route('/api/player/<int:player_id>/minutes-projection')
+def player_minutes_projection(player_id):
+    """
+    Minutes Slider / Per-36 Projection
+
+    Returns the player's season per-game averages and per-36-minute rates so the
+    frontend can project fantasy points at any minute level.
+
+    Projection math (linear per-36 scaling):
+        projected_stat(M) = per36_stat * (M / 36)
+        projected_fps(M) = sum(projected_stat(M) * SCORING[stat])
+    """
+    df = get_player_gamelog(player_id, n_games=30)
+    if df.empty:
+        return jsonify({'error': 'No data'}), 404
+
+    def _avg(*cols):
+        for c in cols:
+            if c in df.columns:
+                vals = pd.to_numeric(df[c], errors='coerce').dropna()
+                if len(vals):
+                    return round(float(vals.mean()), 3)
+        return 0.0
+
+    avg_min = _avg('MIN', 'minutes', 'MP')
+    avg_pts = _avg('PTS', 'points')
+    avg_reb = _avg('REB', 'rebounds')
+    avg_ast = _avg('AST', 'assists')
+    avg_stl = _avg('STL', 'steals')
+    avg_blk = _avg('BLK', 'blocks')
+    avg_tov = _avg('TOV', 'turnovers')
+
+    # Per-36-minute rates (guard against zero minutes)
+    m = avg_min if avg_min and avg_min > 0 else 36.0
+    scale = 36.0 / m
+
+    def per36(v):
+        return round(v * scale, 3)
+
+    per36 = {
+        'pts': per36(avg_pts),
+        'reb': per36(avg_reb),
+        'ast': per36(avg_ast),
+        'stl': per36(avg_stl),
+        'blk': per36(avg_blk),
+        'tov': per36(avg_tov),
+    }
+
+    # Baseline FPS at the player's actual average minutes
+    baseline_fps = round(
+        SCORING['PTS'] * avg_pts +
+        SCORING['REB'] * avg_reb +
+        SCORING['AST'] * avg_ast +
+        SCORING['STL'] * avg_stl +
+        SCORING['BLK'] * avg_blk +
+        SCORING['TOV'] * avg_tov, 1)
+
+    return jsonify({
+        'player_id': player_id,
+        'games': len(df),
+        'avg_min': round(avg_min, 1),
+        'avg': {
+            'pts': round(avg_pts, 1), 'reb': round(avg_reb, 1),
+            'ast': round(avg_ast, 1), 'stl': round(avg_stl, 1),
+            'blk': round(avg_blk, 1), 'tov': round(avg_tov, 1),
+        },
+        'per36': per36,
+        'baseline_fps': baseline_fps,
+        'scoring': SCORING,
     })
 
 

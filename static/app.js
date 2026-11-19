@@ -83,8 +83,7 @@
     if (playerCacheLoaded) return;
     playerCacheLoaded = true;
     try {
-      // Fetch the full player list once so the dropdown appears immediately
-      const data = await api('/api/players/search?q=a');
+      const data = await api('/api/players/search?limit=500');
       playerCache = data;
     } catch (e) {
       console.warn('Player cache load failed', e);
@@ -111,7 +110,11 @@
     input.addEventListener('input', () => {
       clearTimeout(debounceTimer);
       const q = input.value.trim().toLowerCase();
-      if (q.length < 1) { hide(results); return; }
+      if (q.length < 1) {
+        if (playerCache.length) renderAutocomplete(playerCache, input, results);
+        else hide(results);
+        return;
+      }
       // Use cached full list when available for instant results; fall back to API
       if (playerCache.length) {
         const matches = playerCache.filter(p =>
@@ -1363,6 +1366,149 @@
   IDS.forEach(id => $wp(id).addEventListener("input", render));
   $wp("reset")?.addEventListener("click", () => { fillInputs(EXAMPLES); render(); });
   render();
+
+  // ===================================================================
+  // Minutes Slider - Per-36 Projection
+  // ===================================================================
+  let msData = null;
+  let msPlayerId = null;
+
+  setupAutocomplete('ms-player', 'ms-ac');
+
+  async function loadMinutesProjection(pid) {
+    const panel = $('#minutes-results');
+    panel.hidden = true;
+    try {
+      const data = await api(`/api/player/${pid}/minutes-projection`);
+      msData = data;
+      msPlayerId = pid;
+      $('#ms-header').innerHTML = `
+        <div class="ms-header-row">
+          <span class="ms-name">${data.player_id ? '' : ''}</span>
+          <span class="ms-meta">${data.games} games · avg ${data.avg_min} MPG</span>
+        </div>
+        <div class="ms-baseline">Baseline FPS at ${data.avg_min} MPG: <strong>${data.baseline_fps}</strong></div>
+      `;
+      show(panel);
+      renderMinutes();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function renderMinutes() {
+    if (!msData) return;
+    const mins = parseFloat($('#ms-minutes').value);
+    const p36 = msData.per36;
+    const s = msData.scoring;
+
+    // Per-36 linear scaling: stat * (M / 36)
+    const scale = mins / 36;
+    const proj = {
+      pts: p36.pts * scale,
+      reb: p36.reb * scale,
+      ast: p36.ast * scale,
+      stl: p36.stl * scale,
+      blk: p36.blk * scale,
+      tov: p36.tov * scale,
+    };
+    const fps = s.PTS * proj.pts + s.REB * proj.reb + s.AST * proj.ast +
+      s.STL * proj.stl + s.BLK * proj.blk + s.TOV * proj.tov;
+
+    const diff = fps - msData.baseline_fps;
+    const pct = msData.avg_min > 0 ? (mins / msData.avg_min * 100) : 0;
+
+    $('#ms-fps-val').textContent = fmt(fps, 1);
+    $('#ms-minutes-val').textContent = fmt(mins, 1);
+
+    const breakdown = [
+      ['PTS', proj.pts, s.PTS],
+      ['REB', proj.reb, s.REB],
+      ['AST', proj.ast, s.AST],
+      ['STL', proj.stl, s.STL],
+      ['BLK', proj.blk, s.BLK],
+      ['TOV', proj.tov, s.TOV],
+    ];
+    $('#ms-breakdown').innerHTML = breakdown.map(([k, v, w]) => {
+      const contrib = v * w;
+      const cls = contrib >= 0 ? 'ms-pos' : 'ms-neg';
+      return `<div class="ms-line"><span class="ms-stat">${k}</span>
+        <span class="ms-val">${fmt(v, 1)}</span>
+        <span class="ms-contrib ${cls}">${signed(contrib, 1)}</span></div>`;
+    }).join('');
+
+    $('#ms-stats').innerHTML = `
+      <div class="ms-meta-row">
+        <div class="ms-stat-tile"><div class="ms-stat-val">${fmt(mins, 1)}</div><div class="ms-stat-label">Minutes</div></div>
+        <div class="ms-stat-tile"><div class="ms-stat-val">${fmt(pct, 0)}%</div><div class="ms-stat-label">vs Avg (${msData.avg_min})</div></div>
+        <div class="ms-stat-tile"><div class="ms-stat-val ${diff >= 0 ? 'good' : 'bad'}">${signed(diff, 1)}</div><div class="ms-stat-label">Δ vs Baseline</div></div>
+      </div>
+    `;
+  }
+
+  function parseMinutesInput(val) {
+    // Accept "38:51" (mm:ss) or "38.5" (decimal) or "3851" -> treat as mmss without colon
+    const s = val.trim();
+    if (!s) return null;
+    if (s.includes(':')) {
+      const [m, sec] = s.split(':').map(Number);
+      if (isNaN(m) || isNaN(sec)) return null;
+      return m + sec / 60;
+    }
+    // If 4+ digits like "3851", interpret as mmss
+    if (/^\d{4,}$/.test(s)) {
+      const m = parseInt(s.slice(0, -2), 10);
+      const sec = parseInt(s.slice(-2), 10);
+      return m + sec / 60;
+    }
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function formatMinutesForDisplay(mins) {
+    // Return mm:ss for display
+    const m = Math.floor(mins);
+    const sec = Math.round((mins - m) * 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
+  function syncMinutesInputs(mins) {
+    const clamped = Math.max(0, Math.min(48, mins));
+    const slider = $('#ms-minutes');
+    const textInput = $('#ms-minutes-input');
+    const output = $('#ms-minutes-val');
+    slider.value = clamped;
+    textInput.value = formatMinutesForDisplay(clamped);
+    output.textContent = formatMinutesForDisplay(clamped);
+    renderMinutes();
+  }
+
+  $('#ms-minutes').addEventListener('input', e => {
+    // Only update visuals if event is from user interaction
+    const mins = parseFloat(e.target.value);
+    const textInput = $('#ms-minutes-input');
+    const output = $('#ms-minutes-val');
+    textInput.value = formatMinutesForDisplay(mins);
+    output.textContent = formatMinutesForDisplay(mins);
+    renderMinutes();
+  });
+
+  $('#ms-minutes-input').addEventListener('change', e => {
+    const parsed = parseMinutesInput(e.target.value);
+    if (parsed !== null) {
+      syncMinutesInputs(parsed);
+      renderMinutes();
+    } else {
+      // Invalid input, reset to current slider value
+      syncMinutesInputs(parseFloat($('#ms-minutes').value));
+    }
+  });
+
+  $('#ms-load').addEventListener('click', () => {
+    const input = $('#ms-player');
+    const pid = input.dataset.playerId;
+    if (pid) loadMinutesProjection(parseInt(pid, 10));
+  });
 
   // ===================================================================
   // Init
