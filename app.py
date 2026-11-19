@@ -7,6 +7,7 @@ import os
 import json
 import math
 import time
+import threading
 import unicodedata
 from datetime import datetime, date, timedelta
 from functools import lru_cache
@@ -33,6 +34,13 @@ SCORING = {
     'FGM': 0.0,
     'FTM': 0.0,
 }
+
+# Box-score cache shared across the rankings computation. Each unique game is
+# fetched exactly once even though every player on both teams needs it.
+_BOX_SCORE_CACHE: Dict[str, Dict] = {}
+_BOX_SCORE_CACHE_LOCK = threading.Lock()
+# Cap the cache so a long season cannot grow unbounded.
+_BOX_SCORE_CACHE_MAX = 4000
 
 # =====================================================================
 # NBA API Helpers
@@ -862,6 +870,27 @@ def get_shooting_splits(row: pd.Series) -> Dict[str, str]:
 # =====================================================================
 # Player Rankings
 # =====================================================================
+
+def get_box_score_cached(game_id: str) -> Dict[str, Any]:
+    """Fetch a box score once and reuse it for every player in that game.
+
+    Without this, get_player_rankings re-fetched the same box score once per
+    player per game (thousands of redundant ESPN calls), making the endpoint
+    take 60-80 seconds. This caches results in a bounded dict.
+    """
+    if not game_id:
+        return {'players': [], 'source': 'espn'}
+    key = str(game_id)
+    with _BOX_SCORE_CACHE_LOCK:
+        cached = _BOX_SCORE_CACHE.get(key)
+        if cached is not None:
+            return cached
+    box = get_espn_box_score(key)
+    with _BOX_SCORE_CACHE_LOCK:
+        if len(_BOX_SCORE_CACHE) < _BOX_SCORE_CACHE_MAX:
+            _BOX_SCORE_CACHE[key] = box
+    return box
+
 
 @lru_cache(maxsize=64)
 def get_player_rankings(period: str = 'season', season: str = '2026-27',
