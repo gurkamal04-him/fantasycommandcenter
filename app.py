@@ -186,6 +186,7 @@ def get_team_id(abbrev: str) -> Optional[int]:
 
 
 @lru_cache(maxsize=64)
+@lru_cache(maxsize=128)
 def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 50) -> pd.DataFrame:
     """Get player game log for current season using ESPN schedule + box scores.
 
@@ -601,6 +602,7 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
         return {'players': [], 'source': 'espn', 'error': str(e)}
 
 
+@lru_cache(maxsize=64)
 @lru_cache(maxsize=64)
 def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
     """
@@ -2126,5 +2128,7 @@ def season_outlook():
 # Main
 # =====================================================================
 if __name__ == '__main__':
+    # Pre-warm rankings cache in the background so the first request is fast
+    threading.Thread(target=warm_rankings, args=('season', '2026-27'), daemon=True).start()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
