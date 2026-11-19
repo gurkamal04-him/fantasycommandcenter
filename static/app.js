@@ -26,6 +26,22 @@
   function hide(el) { el.hidden = true; }
   function setText(el, text) { if (el) el.textContent = text; }
 
+  // The rankings endpoint warms its cache in a background thread, so the
+  // first response can come back with warming:true. Poll until it's ready.
+  async function fetchRankingsWithPoll(url, { signal, maxAttempts = 60 } = {}) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const r = await fetch(url, { signal });
+      if (!r.ok) throw new Error(r.statusText);
+      const data = await r.json();
+      if (data.warming) {
+        await new Promise(res => setTimeout(res, 2000));
+        continue;
+      }
+      return data;
+    }
+    throw new Error('Timed out waiting for rankings');
+  }
+
   // ===================================================================
   // Navigation / Page Switching
   // ===================================================================
@@ -994,7 +1010,7 @@
         }
         url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
       }
-      const data = await api(url);
+      const data = await fetchRankingsWithPoll(url);
       rkPlayersData = data.players || [];
       meta.textContent = `Period: ${data.period_label || period} | Season: ${season} | Players: ${rkPlayersData.length}`;
       sortAndRenderRankings();

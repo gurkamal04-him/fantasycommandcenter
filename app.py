@@ -43,6 +43,54 @@ _BOX_SCORE_CACHE_LOCK = threading.Lock()
 # Cap the cache so a long season cannot grow unbounded.
 _BOX_SCORE_CACHE_MAX = 4000
 
+# Rankings warm state. The first rankings request on a cold boot (or after
+# gunicorn recycles a worker) can take 20-30s, and Render's free-tier load
+# balancer kills requests after ~30s. We warm the cache in a background
+# thread so the endpoint responds in milliseconds; the frontend polls until
+# the warm finishes and the cached result is served.
+_RANKINGS_LOCK = threading.Lock()
+_RANKINGS_CACHE: Dict[str, List[Dict]] = {}
+_RANKINGS_WARMING: set = set()
+_RANKINGS_ERROR: Dict[str, str] = {}
+
+# Common periods to keep warm so switching the dropdown is instant.
+_RK_COMMON_PERIODS = ('season', '2weeks', '1week')
+
+
+def _rk_key(period: str, season: str, start_date: str, end_date: str) -> str:
+    return f"{period}|{season}|{start_date}|{end_date}"
+
+
+def warm_rankings(period: str = 'season', season: str = '2026-27',
+                  start_date: str = '', end_date: str = '') -> None:
+    """Compute rankings in the background so the first request is fast.
+
+    Warms the requested (period, season) plus the other common periods so
+    every dropdown choice is cached by the time the user switches to it.
+    """
+    keys = [_rk_key(period, season, start_date, end_date)]
+    if not start_date and not end_date:
+        keys += [_rk_key(p, season, '', '') for p in _RK_COMMON_PERIODS if p != period]
+
+    with _RANKINGS_LOCK:
+        if any(k in _RANKINGS_WARMING for k in keys):
+            return
+        for k in keys:
+            _RANKINGS_WARMING.add(k)
+
+    try:
+        for k in keys:
+            p, s, sd, ed = k.split('|')
+            result = get_player_rankings(p, s, sd, ed)
+            with _RANKINGS_LOCK:
+                _RANKINGS_CACHE[k] = result
+                _RANKINGS_WARMING.discard(k)
+    except Exception as e:
+        with _RANKINGS_LOCK:
+            for k in keys:
+                _RANKINGS_WARMING.discard(k)
+                _RANKINGS_ERROR[k] = str(e)
+
 # =====================================================================
 # NBA API Helpers
 # =====================================================================
@@ -1066,6 +1114,14 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
         return []
 
 
+def period_label(period: str, start_date: str, end_date: str) -> str:
+    """Human-readable label for a rankings period."""
+    if period == 'custom' and start_date and end_date:
+        return f"{start_date} → {end_date}"
+    return {'2weeks': 'Last 2 Weeks', '1week': 'Last Week',
+            'season': 'Whole Season'}.get(period, period)
+
+
 @app.route('/api/player-rankings')
 def player_rankings():
     """Get player rankings by total fantasy points"""
@@ -1073,21 +1129,38 @@ def player_rankings():
     season = request.args.get('season', '2026-27')
     start_date = request.args.get('start_date', '')
     end_date = request.args.get('end_date', '')
-    rankings = get_player_rankings(period, season, start_date, end_date)
-    # Human-readable label for the period
-    if period == 'custom' and start_date and end_date:
-        period_label = f"{start_date} → {end_date}"
-    elif period == '2weeks':
-        period_label = 'Last 2 Weeks'
-    elif period == '1week':
-        period_label = 'Last Week'
-    elif period == 'season':
-        period_label = 'Whole Season'
-    else:
-        period_label = period
+
+    key = _rk_key(period, season, start_date, end_date)
+
+    # Kick off a background warm if nothing is cached yet. The endpoint never
+    # blocks on the cold computation — it returns the cached result or a
+    # "warming" status so the frontend can poll.
+    with _RANKINGS_LOCK:
+        warming = key in _RANKINGS_WARMING
+        cached = _RANKINGS_CACHE.get(key)
+        err = _RANKINGS_ERROR.get(key)
+    if not warming and cached is None and err is None:
+        threading.Thread(target=warm_rankings, args=(period, season, start_date, end_date), daemon=True).start()
+        warming = True
+
+    if warming and cached is None:
+        # Still computing — respond instantly so the load balancer doesn't
+        # time out. The frontend polls until this becomes a real result.
+        return jsonify({
+            'period': period,
+            'period_label': period_label(period, start_date, end_date),
+            'start_date': start_date,
+            'end_date': end_date,
+            'season': season,
+            'players': [],
+            'warming': True,
+            'error': err,
+        })
+
+    rankings = cached if cached is not None else get_player_rankings(period, season, start_date, end_date)
     return jsonify({
         'period': period,
-        'period_label': period_label,
+        'period_label': period_label(period, start_date, end_date),
         'start_date': start_date,
         'end_date': end_date,
         'season': season,
