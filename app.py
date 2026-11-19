@@ -1,6 +1,6 @@
 """
 NBA Fantasy Command Center - Flask Backend
-Free-to-use fantasy basketball suite using nba_api
+Free-to-use fantasy basketball suite using ESPN public API
 """
 
 import os
@@ -597,12 +597,14 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
 
             def _score(comp):
                 s = comp.get('score')
+                if isinstance(s, dict):
+                    return int(s.get('value', 0)) if s.get('value') is not None else None
                 return int(s) if s is not None else None
 
             rows.append({
                 'GAME_DATE': game_date,
-                'homeTeam_teamId': int(home_team.get('id', 0)),
-                'awayTeam_teamId': int(away_team.get('id', 0)),
+                'homeTeam_teamId': int(str(home_team.get('id', '0'))),
+                'awayTeam_teamId': int(str(away_team.get('id', '0'))),
                 'homeTeam_teamTricode': home_team.get('abbreviation', ''),
                 'awayTeam_teamTricode': away_team.get('abbreviation', ''),
                 'homeTeam_score': _score(home_comp),
@@ -852,77 +854,132 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List
 
     period: 'season' (full season), '2weeks' (last 14 days), '1week' (last 7 days)
     Returns top 200 players with avg FPS, total FPS, and usage over the period.
+
+    Uses ESPN schedule + box scores since there's no direct player gamelog endpoint.
+    Optimized: fetches team schedules and box scores in bulk rather than per-player.
     """
-    # Attempt primary NBA API; if it fails (common on Render), fall back to empty list with a note.
     try:
-        df = LeagueGameLog(
-            league_id='00',
-            season=season,
-            season_type_all_star='Regular Season',
-            player_or_team_abbreviation='P',
-            date_from_nullable='',
-            date_to_nullable='',
-        ).get_data_frames()[0]
+        all_players = get_all_players()
+        if not all_players:
+            return []
+
+        today = datetime.now().date()
+
+        # Pre-fetch all team schedules for the season
+        team_schedules = {}
+        for p in all_players:
+            team_id = p.get('TEAM_ID')
+            if team_id and team_id not in team_schedules:
+                team_schedules[team_id] = get_espn_team_schedule(team_id, season)
+
+        # For each player, filter their team's games to completed ones
+        rankings = []
+
+        # Limit to players with sufficient games (performance)
+        for p in all_players:
+            player_id = p.get('PERSON_ID')
+            team_id = p.get('TEAM_ID')
+            if not player_id or not team_id:
+                continue
+
+            team_df = team_schedules.get(team_id)
+            if team_df is None or team_df.empty:
+                continue
+
+            # Only completed games
+            completed_games = team_df[team_df['status'].str.contains('FINAL', na=False, case=False)]
+            if completed_games.empty:
+                continue
+
+            # Get player's games from box scores (limit to reduce API calls)
+            games = []
+            for _, event_row in completed_games.iterrows():
+                if len(games) >= 50:  # Limit for performance
+                    break
+                espn_game_id = event_row.get('gameId') or event_row.get('event_id')
+                if not espn_game_id:
+                    continue
+                box = get_espn_box_score(espn_game_id)
+                for player in box.get('players', []):
+                    if str(player.get('playerId')) == str(player_id):
+                        player['gameDate'] = str(event_row.get('GAME_DATE', ''))[:10]
+                        games.append(player)
+                        break
+
+            if not games:
+                continue
+
+            # Convert to DataFrame
+            rows = []
+            for g in games:
+                row = {
+                    'PERSON_ID': player_id,
+                    'GAME_DATE': g.get('gameDate', ''),
+                    'MIN': g.get('minutes', 0),
+                    'PTS': g.get('points', 0),
+                    'REB': g.get('rebounds', 0),
+                    'AST': g.get('assists', 0),
+                    'STL': g.get('steals', 0),
+                    'BLK': g.get('blocks', 0),
+                    'TOV': g.get('turnovers', 0),
+                    'FGM': g.get('fieldGoalsMade', 0),
+                    'FGA': g.get('fieldGoalsAttempted', 0),
+                    'FG3M': g.get('threePointFieldGoalsMade', 0),
+                    'FG3A': g.get('threePointFieldGoalsAttempted', 0),
+                    'FTM': g.get('freeThrowsMade', 0),
+                    'FTA': g.get('freeThrowsAttempted', 0),
+                }
+                rows.append(row)
+
+            df = pd.DataFrame(rows)
+            if df.empty:
+                continue
+
+            # Filter by period
+            df = df.copy()
+            df['_game_date'] = pd.to_datetime(df['GAME_DATE']).dt.date
+
+            if period == '2weeks':
+                cutoff = today - timedelta(days=14)
+                df = df[df['_game_date'] >= cutoff]
+            elif period == '1week':
+                cutoff = today - timedelta(days=7)
+                df = df[df['_game_date'] >= cutoff]
+
+            if df.empty:
+                continue
+
+            n_games = len(df)
+            total_fps = sum(calc_fps(r) for _, r in df.iterrows())
+            avg_fps = total_fps / n_games
+            avg_usage = sum(calc_usage_pct(r) for _, r in df.iterrows()) / n_games
+
+            def avg_stat(col):
+                vals = [float(r.get(col, 0)) for _, r in df.iterrows() if pd.notna(r.get(col))]
+                return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+            rankings.append({
+                'player_id': int(player_id),
+                'name': str(p.get('DISPLAY_FIRST_LAST', '')),
+                'team': str(p.get('TEAM_ABBREVIATION', '')),
+                'games': n_games,
+                'avg_fps': round(avg_fps, 1),
+                'total_fps': round(total_fps, 1),
+                'avg_usage': round(avg_usage, 1),
+                'pts': avg_stat('PTS'),
+                'reb': avg_stat('REB'),
+                'ast': avg_stat('AST'),
+                'stl': avg_stat('STL'),
+                'blk': avg_stat('BLK'),
+                'tov': avg_stat('TOV'),
+            })
+
+        # Sort by total FPS descending, top 200
+        rankings.sort(key=lambda x: -x['total_fps'])
+        return rankings[:200]
     except Exception as e:
-        # Primary source unreachable
-        print(f"Primary NBA API failed for player rankings: {e}")
-        return []  # No reliable alternative available
-
-    if df.empty:
+        print(f"Error fetching player rankings: {e}")
         return []
-
-    # Parse game dates
-    parsed_dates = []
-    for d in df['GAME_DATE']:
-        try:
-            parsed_dates.append(parse_game_date(str(d)))
-        except (ValueError, TypeError):
-            parsed_dates.append(None)
-    df = df.assign(_game_date=parsed_dates).dropna(subset=['_game_date'])
-
-    today = datetime.now().date()
-
-    if period == '2weeks':
-        cutoff = today - timedelta(days=14)
-        df = df[df['_game_date'] >= cutoff]
-    elif period == '1week':
-        cutoff = today - timedelta(days=7)
-        df = df[df['_game_date'] >= cutoff]
-    # 'season' = all games
-
-    if df.empty:
-        return []
-
-    # Group by player and compute metrics
-    rankings = []
-    for pid, group in df.groupby('PLAYER_ID'):
-        total_fps = sum(calc_fps(r) for _, r in group.iterrows())
-        n_games = len(group)
-        avg_fps = total_fps / n_games
-        avg_usage = sum(calc_usage_pct(r) for _, r in group.iterrows()) / n_games
-        # Per-game averages for PTS/REB/AST/STL/BLK/TOV
-        def avg_stat(col):
-            vals = [float(r.get(col, 0)) for _, r in group.iterrows() if pd.notna(r.get(col))]
-            return round(sum(vals) / len(vals), 1) if vals else 0.0
-        rankings.append({
-            'player_id': int(pid),
-            'name': str(group.iloc[0]['PLAYER_NAME']),
-            'team': str(group.iloc[0].get('TEAM_ABBREVIATION', '')),
-            'games': n_games,
-            'avg_fps': round(avg_fps, 1),
-            'total_fps': round(total_fps, 1),
-            'avg_usage': round(avg_usage, 1),
-            'pts': avg_stat('PTS'),
-            'reb': avg_stat('REB'),
-            'ast': avg_stat('AST'),
-            'stl': avg_stat('STL'),
-            'blk': avg_stat('BLK'),
-            'tov': avg_stat('TOV'),
-        })
-
-    # Sort by total FPS descending, top 200
-    rankings.sort(key=lambda x: -x['total_fps'])
-    return rankings[:200]
 
 
 @app.route('/api/player-rankings')
@@ -1092,7 +1149,12 @@ def box_score(game_id):
             'plus_minus': row.get('plusMinusPoints', row.get('plusMinus', row.get('PLUS_MINUS', 0))),
         })
 
-    return jsonify({'game_id': game_id, 'players': players_data})
+    # Replace NaN with null for JSON compatibility
+    cleaned_players = []
+    for p in players_data:
+        cleaned = {k: (None if isinstance(v, float) and (v != v) else v) for k, v in p.items()}
+        cleaned_players.append(cleaned)
+    return jsonify({'game_id': game_id, 'players': cleaned_players})
 
 
 @app.route('/api/scoreboard')
@@ -1145,57 +1207,13 @@ def scoreboard():
             })
         return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
     except Exception as e:
-        # Fallback to original NBA API attempt if ESPN fails
-        try:
-            dfs = ScoreboardV3(game_date=date_str).get_data_frames()
-            if not dfs or len(dfs) < 3:
-                raise RuntimeError('Unexpected NBA API response')
-            games_df = dfs[1]
-            teams_df = dfs[2]
-            if games_df.empty:
-                raise RuntimeError('No games returned')
-            games = {}
-            for _, t in teams_df.iterrows():
-                gid = t['gameId']
-                if gid not in games:
-                    games[gid] = {'gameId': gid, 'home': {}, 'away': {}}
-            for _, g in games_df.iterrows():
-                gid = g['gameId']
-                if gid in games:
-                    games[gid].update({
-                        'gameStatus': g.get('gameStatus', ''),
-                        'gameStatusText': g.get('gameStatusText', ''),
-                        'gameEt': g.get('gameEt', ''),
-                        'period': g.get('period', 0),
-                        'gameCode': g.get('gameCode', ''),
-                    })
-            for _, t in teams_df.iterrows():
-                gid = t['gameId']
-                if gid not in games:
-                    continue
-                entry = {
-                    'teamId': int(t['teamId']),
-                    'teamCity': t.get('teamCity', ''),
-                    'teamName': t.get('teamName', ''),
-                    'teamTricode': t.get('teamTricode', ''),
-                    'score': int(t['score']) if pd.notna(t.get('score')) else None,
-                    'wins': int(t.get('wins')) if pd.notna(t.get('wins')) else 0,
-                    'losses': int(t.get('losses')) if pd.notna(t.get('losses')) else 0,
-                }
-                if not games[gid]['home']:
-                    games[gid]['home'] = entry
-                else:
-                    games[gid]['away'] = entry
-            result = [v for v in games.values() if v['home'] and v['away']]
-            return jsonify({'date': date_str, 'games': result, 'source': 'nba_api'})
-        except Exception as nba_err:
-            return jsonify({
-                'error': 'Failed to fetch scoreboard from both ESPN and NBA API',
-                'espn_error': str(e),
-                'nba_api_error': str(nba_err),
-                'date': date_str,
-                'games': []
-            })
+        print(f"Error fetching scoreboard from ESPN: {e}")
+        return jsonify({
+            'error': 'Failed to fetch scoreboard from ESPN',
+            'espn_error': str(e),
+            'date': date_str,
+            'games': []
+        })
 
 
 @app.route('/api/start-sit', methods=['POST'])
