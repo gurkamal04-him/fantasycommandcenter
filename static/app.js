@@ -950,12 +950,35 @@
   let rkSortBy = 'total_fps';
   let rkSortDir = 'desc';
 
+  // Show/hide the custom date-range inputs when the period changes
+  $('#rk-period')?.addEventListener('change', () => {
+    const custom = $('#rk-custom-range');
+    if ($('#rk-period').value !== 'custom') {
+      custom.hidden = true;
+    } else {
+      custom.hidden = false;
+      // Pre-fill with the last 30 days if blank
+      const today = new Date();
+      const iso = (d) => d.toISOString().slice(0, 10);
+      if (!$('#rk-start-date').value) {
+        const start = new Date(today);
+        start.setDate(start.getDate() - 30);
+        $('#rk-start-date').value = iso(start);
+      }
+      if (!$('#rk-end-date').value) {
+        $('#rk-end-date').value = iso(today);
+      }
+    }
+  });
+
   $('#rk-load')?.addEventListener('click', async () => {
     const period = $('#rk-period').value;
     const season = $('#rk-season').value;
     const sortBy = $('#rk-sort').value;
     rkSortBy = sortBy;
     rkSortDir = 'desc'; // reset to desc when loading new data
+    const startDate = $('#rk-start-date').value;
+    const endDate = $('#rk-end-date').value;
     const tbody = $('#rk-tbody');
     const meta = $('#rk-meta');
     const wrap = $('#rankings-results');
@@ -963,9 +986,17 @@
     tbody.innerHTML = '<tr><td colspan="12" class="loading">Loading rankings…</td></tr>';
     meta.textContent = '';
     try {
-      const data = await api(`/api/player-rankings?period=${period}&season=${season}`);
+      let url = `/api/player-rankings?period=${encodeURIComponent(period)}&season=${encodeURIComponent(season)}`;
+      if (period === 'custom') {
+        if (!startDate || !endDate) {
+          tbody.innerHTML = '<tr><td colspan="12" class="empty">Please select a start and end date for the custom range</td></tr>';
+          return;
+        }
+        url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+      }
+      const data = await api(url);
       rkPlayersData = data.players || [];
-      meta.textContent = `Period: ${period} | Season: ${season} | Players: ${rkPlayersData.length}`;
+      meta.textContent = `Period: ${data.period_label || period} | Season: ${season} | Players: ${rkPlayersData.length}`;
       sortAndRenderRankings();
     } catch (e) {
       tbody.innerHTML = '<tr><td colspan="12" class="empty">Failed to load rankings</td></tr>';
@@ -1071,7 +1102,10 @@
       fmt(p.total_fps, 1)
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
-    downloadCSV(csv, `player-rankings-${$('#rk-period').value}-${$('#rk-season').value}.csv`);
+    const fnamePeriod = $('#rk-period').value === 'custom'
+      ? `${$('#rk-start-date').value}_${$('#rk-end-date').value}`
+      : $('#rk-period').value;
+    downloadCSV(csv, `player-rankings-${fnamePeriod}-${$('#rk-season').value}.csv`);
   }
 
   // ===================================================================

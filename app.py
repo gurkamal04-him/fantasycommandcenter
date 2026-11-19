@@ -494,15 +494,18 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
             if team.get('homeAway') == 'away':
                 away_team = team
 
-        # Team-level stats (for usage calc fallback)
+        # Team-level stats (for usage calc)
+        # Team statistics use {name, displayValue} pairs, not {keys, displayValues}.
         team_stats = {}
         for t in teams:
             team = t.get('team', {})
             abbr = team.get('abbreviation')
             tm = {}
             for s in t.get('statistics', []):
-                for k, v in zip(s.get('keys', []), s.get('displayValues', []) or []):
-                    tm[k] = v
+                name = s.get('name')
+                val = s.get('displayValue')
+                if name and val is not None:
+                    tm[name] = val
             team_stats[abbr] = tm
 
         players = []
@@ -860,12 +863,15 @@ def get_shooting_splits(row: pd.Series) -> Dict[str, str]:
 # Player Rankings
 # =====================================================================
 
-@lru_cache(maxsize=32)
-def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List[Dict]:
+@lru_cache(maxsize=64)
+def get_player_rankings(period: str = 'season', season: str = '2026-27',
+                        start_date: str = '', end_date: str = '') -> List[Dict]:
     """
     Get player rankings by total fantasy points over a time period.
 
-    period: 'season' (full season), '2weeks' (last 14 days), '1week' (last 7 days)
+    period: 'season' (full season), '2weeks' (last 14 days), '1week' (last 7 days),
+            'custom' (explicit start_date/end_date)
+    start_date/end_date: ISO 'YYYY-MM-DD' strings, used when period == 'custom'.
     Returns top 200 players with avg FPS, total FPS, and usage over the period.
 
     Uses ESPN schedule + box scores since there's no direct player gamelog endpoint.
@@ -877,6 +883,24 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List
             return []
 
         today = datetime.now().date()
+
+        # Resolve the date window for the requested period
+        if period == 'custom':
+            try:
+                cutoff_start = datetime.strptime(start_date, '%Y-%m-%d').date()
+                cutoff_end = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                cutoff_start = today - timedelta(days=30)
+                cutoff_end = today
+        elif period == '2weeks':
+            cutoff_start = today - timedelta(days=14)
+            cutoff_end = today
+        elif period == '1week':
+            cutoff_start = today - timedelta(days=7)
+            cutoff_end = today
+        else:  # 'season' — no filtering, use the whole season
+            cutoff_start = None
+            cutoff_end = None
 
         # Pre-fetch all team schedules for the season
         team_schedules = {}
@@ -952,12 +976,10 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27') -> List
             df = df.copy()
             df['_game_date'] = pd.to_datetime(df['GAME_DATE']).dt.date
 
-            if period == '2weeks':
-                cutoff = today - timedelta(days=14)
-                df = df[df['_game_date'] >= cutoff]
-            elif period == '1week':
-                cutoff = today - timedelta(days=7)
-                df = df[df['_game_date'] >= cutoff]
+            if cutoff_start is not None:
+                df = df[df['_game_date'] >= cutoff_start]
+            if cutoff_end is not None:
+                df = df[df['_game_date'] <= cutoff_end]
 
             if df.empty:
                 continue
@@ -1000,8 +1022,28 @@ def player_rankings():
     """Get player rankings by total fantasy points"""
     period = request.args.get('period', 'season')
     season = request.args.get('season', '2026-27')
-    rankings = get_player_rankings(period, season)
-    return jsonify({'period': period, 'season': season, 'players': rankings})
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    rankings = get_player_rankings(period, season, start_date, end_date)
+    # Human-readable label for the period
+    if period == 'custom' and start_date and end_date:
+        period_label = f"{start_date} → {end_date}"
+    elif period == '2weeks':
+        period_label = 'Last 2 Weeks'
+    elif period == '1week':
+        period_label = 'Last Week'
+    elif period == 'season':
+        period_label = 'Whole Season'
+    else:
+        period_label = period
+    return jsonify({
+        'period': period,
+        'period_label': period_label,
+        'start_date': start_date,
+        'end_date': end_date,
+        'season': season,
+        'players': rankings,
+    })
 
 
 # =====================================================================
