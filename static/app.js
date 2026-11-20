@@ -971,6 +971,13 @@
   let rkPlayersData = [];
   let rkSortBy = 'total_fps';
   let rkSortDir = 'desc';
+  let rkSearchTerm = '';
+
+  // Live player-name search: filters the rendered table as you type.
+  $('#rk-search')?.addEventListener('input', (e) => {
+    rkSearchTerm = e.target.value.trim().toLowerCase();
+    sortAndRenderRankings();
+  });
 
   // Show/hide the custom date-range inputs when the period changes
   $('#rk-period')?.addEventListener('change', () => {
@@ -1033,8 +1040,19 @@
       return;
     }
 
+    // Filter by search term (matches first or last name, case-insensitive)
+    let filtered = rkPlayersData;
+    if (rkSearchTerm) {
+      filtered = rkPlayersData.filter(p => {
+        const name = (p.name || '').toLowerCase();
+        // Match against the full name and each individual first/last token
+        const tokens = name.split(/[\s'-]+/).filter(Boolean);
+        return tokens.some(t => t.startsWith(rkSearchTerm));
+      });
+    }
+
     // Sort
-    const sorted = [...rkPlayersData].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       const va = a[rkSortBy] ?? 0;
       const vb = b[rkSortBy] ?? 0;
       const cmp = va < vb ? -1 : va > vb ? 1 : 0;
@@ -1065,6 +1083,16 @@
       </tr>
     `;
     }).join('');
+
+    // Update the meta line to reflect search results
+    const meta = $('#rk-meta');
+    if (meta) {
+      // Remove any stale "Showing" suffix first
+      meta.textContent = meta.textContent.replace(/\s*\|\s*Showing \d+ of \d+ players$/, '');
+      if (rkSearchTerm) {
+        meta.textContent += ` | Showing ${sorted.length} of ${rkPlayersData.length} players`;
+      }
+    }
   }
 
   // Rankings table sorting via column headers

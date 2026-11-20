@@ -329,6 +329,9 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .controls-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
 .controls-row .field { flex: 1; min-width: 160px; }
 .controls-row .btn { flex-shrink: 0; }
+.rk-search { flex: 1 1 260px; }
+.rk-search input { width: 100%; }
+.rk-search .rk-search-count { font-size: 11px; color: var(--ink-muted); margin-top: 2px; }
 
 /* =================================================================== */
 /* Tables                                                              */

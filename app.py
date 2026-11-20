@@ -181,15 +181,33 @@ _FALLBACK_PLAYERS = [
 
 @lru_cache(maxsize=32)
 def get_all_players() -> List[Dict]:
-    """Get all current-season players with team info from ESPN rosters.
+    """Get all current-season players with team info.
 
-    Fetches all 30 team rosters in parallel — serially this takes ~6s,
-    which is a big chunk of every page load that needs the player list.
+    Uses curated fallback player data as the authoritative source for team
+    assignments (real-world current rosters), supplemented with ESPN data
+    for players not in the fallback. This avoids ESPN's 2026-27 projected
+    rosters which can be incorrect (e.g. LeBron on PHI instead of LAL).
     """
+    # Build a lookup from fallback players for authoritative team assignments
+    fallback_by_id = {p['PERSON_ID']: p for p in _FALLBACK_PLAYERS}
+    fallback_names = {p['DISPLAY_FIRST_LAST'].lower(): p for p in _FALLBACK_PLAYERS}
+
     all_teams = get_all_teams()
+    # Map ESPN abbreviation to our canonical abbreviation (e.g. ESPN "GS" -> "GSW")
+    espn_to_canonical = {t['abbreviation']: t['abbreviation'] for t in all_teams}
+    # Known ESPN abbreviations that differ from our canonical ones
+    espn_to_canonical.update({
+        'GS': 'GSW',
+        'SA': 'SAS',
+        'NO': 'NOP',
+        'WSH': 'WAS',
+        'UTAH': 'UTA',
+        'NY': 'NYK',
+    })
 
     def _fetch_roster(team):
         tid = team['id']
+        canonical_abbr = team['abbreviation']
         # ESPN intermittently 403s on roster endpoints; retry a couple times
         # with a short backoff before giving up on that team.
         for attempt in range(3):
@@ -206,7 +224,7 @@ def get_all_players() -> List[Dict]:
                             'PERSON_ID': int(athlete.get('id', 0)),
                             'DISPLAY_FIRST_LAST': athlete.get('displayName', ''),
                             'TEAM_ID': tid,
-                            'TEAM_ABBREVIATION': team['abbreviation'],
+                            'TEAM_ABBREVIATION': espn_to_canonical.get(team['abbreviation'], team['abbreviation']),
                         }
                         for athlete in data.get('athletes', [])
                     ]
@@ -228,7 +246,41 @@ def get_all_players() -> List[Dict]:
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(_fetch_roster, all_teams))
 
-    players = [p for roster in results for p in roster]
+    espn_players = [p for roster in results for p in roster]
+
+    # Merge: prefer fallback team assignments for known players, use ESPN for others
+    merged = {}
+    for p in espn_players:
+        pid = p['PERSON_ID']
+        name = p['DISPLAY_FIRST_LAST'].lower()
+        if pid in fallback_by_id:
+            # Use fallback's team assignment (real-world current roster)
+            fb = fallback_by_id[pid]
+            merged[pid] = {
+                'PERSON_ID': pid,
+                'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
+                'TEAM_ID': fb['TEAM_ID'],
+                'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
+            }
+        elif name in fallback_names:
+            # Match by name as fallback
+            fb = fallback_names[name]
+            merged[pid] = {
+                'PERSON_ID': pid,
+                'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
+                'TEAM_ID': fb['TEAM_ID'],
+                'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
+            }
+        else:
+            # Not in fallback, use ESPN data with canonical abbreviation
+            merged[pid] = p
+
+    # Add any fallback players not found in ESPN data
+    for fb in _FALLBACK_PLAYERS:
+        if fb['PERSON_ID'] not in merged:
+            merged[fb['PERSON_ID']] = fb
+
+    players = list(merged.values())
     if not players:
         return _FALLBACK_PLAYERS
     return players
@@ -290,66 +342,52 @@ def get_team_id(abbrev: str) -> Optional[int]:
 def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 50) -> pd.DataFrame:
     """Get player game log for current season using ESPN schedule + box scores.
 
-    ESPN doesn't have a direct player gamelog endpoint. We fetch the player's team
-    schedule and then get box scores for each game to extract the player's stats.
+    ESPN doesn't have a direct player gamelog endpoint. We fetch the full league
+    schedule (all 30 teams) and then get box scores for completed games to
+    extract the player's stats. This avoids relying on potentially incorrect
+    team assignments from ESPN rosters.
     """
     try:
-        import requests
-        # First, find which team the player is on
         player_id_str = str(player_id)
-        # We need to find the player's team by checking all rosters (cached)
-        all_players = get_all_players()
-        player_info = next((p for p in all_players if str(p.get('PERSON_ID')) == player_id_str), None)
-        if not player_info:
-            print(f"Player {player_id} not found in rosters")
+
+        # Get the full league schedule for the season (all teams, all games)
+        # This is already parallelized and cached via get_espn_all_teams_schedule
+        schedule_df = get_espn_all_teams_schedule(season)
+        if schedule_df.empty:
+            print(f"No schedule data for season {season}")
             return pd.DataFrame()
 
-        team_id = player_info.get('TEAM_ID')
-        if not team_id:
-            print(f"Player {player_id} has no team ID")
+        # Filter to completed games only
+        completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
+        if completed.empty:
             return pd.DataFrame()
-
-        # Get team schedule from ESPN.
-        # ESPN's season parameter is the END year of the season:
-        #   season=2026 → 2025-26 season (Oct 2025 – Apr 2026)
-        #   season=2027 → 2026-27 season (Oct 2026 – Apr 2027)
-        season_year = int(season.split('-')[0]) + 1
-        espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{team_id}/schedule?season={season_year}"
-        resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
 
         games = []
-        for event in data.get('events', []):
-            # Only completed games - status is in competition
-            competition = event.get('competitions', [{}])[0]
-            status_type = competition.get('status', {}).get('type', {})
-            if status_type.get('completed', False):
-                espn_game_id = event.get('id')
-                box = get_espn_box_score(espn_game_id)
-                # Find this player in the box score
-                for p in box.get('players', []):
-                    if str(p.get('playerId')) == player_id_str:
-                        # Get game date from event
-                        p['gameDate'] = event.get('date', '')[:10]
-                        # Build matchup string from event competitors
-                        comps = competition.get('competitors', [])
-                        home_abbr = away_abbr = ''
-                        for c in comps:
-                            t = c.get('team', {})
-                            abbr = t.get('abbreviation', '')
-                            if c.get('homeAway') == 'home':
-                                home_abbr = abbr
-                            elif c.get('homeAway') == 'away':
-                                away_abbr = abbr
-                        p_team = p.get('teamAbbrev', '')
-                        if home_abbr and away_abbr:
-                            opp = away_abbr if p_team == home_abbr else home_abbr
-                            p['matchup'] = f"{p_team} vs {opp}"
-                            p['opp_abbr'] = opp
-                        games.append(p)
-                        break
-                if len(games) >= n_games:
+        for _, row in completed.iterrows():
+            if len(games) >= n_games:
+                break
+            gid = str(row.get('gameId') or '')
+            if not gid:
+                continue
+            box = get_espn_box_score(gid)
+            # Find this player in the box score
+            for p in box.get('players', []):
+                if str(p.get('playerId')) == player_id_str:
+                    # Get game date from event
+                    p['gameDate'] = row.get('GAME_DATE', '')
+                    if hasattr(p['gameDate'], 'isoformat'):
+                        p['gameDate'] = p['gameDate'].isoformat()
+                    else:
+                        p['gameDate'] = str(p['gameDate'])[:10]
+                    # Build matchup string from event competitors
+                    home_abbr = row.get('homeTeam_teamTricode', '')
+                    away_abbr = row.get('awayTeam_teamTricode', '')
+                    p_team = p.get('teamAbbrev', '')
+                    if home_abbr and away_abbr:
+                        opp = away_abbr if p_team == home_abbr else home_abbr
+                        p['matchup'] = f"{p_team} vs {opp}"
+                        p['opp_abbr'] = opp
+                    games.append(p)
                     break
 
         if not games:
