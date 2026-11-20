@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+
+{% block title %}{{ player.name }} - Player Profile{% endblock %}
+
+{% block head %}
+<style>
+  .player-header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+    padding: 24px;
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+  }
+  .player-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    font-family: var(--font-display);
+  }
+  .player-info h1 {
+    margin: 0;
+    font-size: clamp(24px, 5vw, 36px);
+  }
+  .player-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 8px;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .player-meta span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .player-meta strong {
+    color: var(--ink);
+  }
+  .team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--surface-3);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+  }
+  .team-badge::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  .stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+  .stat-group-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    font-weight: 700;
+    padding-left: 4px;
+  }
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 14px 12px;
+    text-align: center;
+    transition: transform var(--transition), box-shadow var(--transition);
+  }
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+  }
+  .stat-card .value {
+    font-size: 26px;
+    font-weight: 700;
+    font-family: var(--font-display);
+    color: var(--ink);
+    line-height: 1.1;
+  }
+  .stat-card .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    margin-top: 4px;
+  }
+  .stat-card.fps { border-left-color: var(--good); }
+  .stat-card.fps .value { color: var(--good); }
+  .stat-card.usage { border-left-color: var(--accent); }
+  .stat-card.usage .value { color: var(--accent); }
+  .stat-card.bad { border-left-color: var(--bad); }
+  .stat-card.bad .value { color: var(--bad); }
+
+  .section {
+    margin-bottom: 32px;
+  }
+  .section h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .table-wrap { overflow-x: auto; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th, table.data-table td {
+    padding: 10px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data-table th {
+    text-align: right;
+    font-weight: 600;
+    color: var(--ink-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  table.data-table td:first-child, table.data-table th:first-child {
+    text-align: left;
+  }
+  table.data-table td:nth-child(2), table.data-table th:nth-child(2) {
+    text-align: center;
+  }
+  table.data-table td:nth-child(3), table.data-table th:nth-child(3) {
+    text-align: center;
+  }
+  table.data-table td:nth-child(4), table.data-table th:nth-child(4) {
+    text-align: center;
+  }
+  table.data-table tbody tr:hover { background: var(--surface-2); }
+  table.data-table .dnp-row { opacity: 0.5; }
+  table.data-table .dnp-row td { color: var(--ink-muted); }
+  table.data-table .fps-cell { font-weight: 700; color: var(--good); }
+  table.data-table .fps-cell.bad { color: var(--bad); }
+  table.data-table .usage-cell { color: var(--accent); font-weight: 600; }
+  table.data-table .started-yes { color: var(--good); }
+  table.data-table .started-no { color: var(--ink-muted); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+  }
+  .tab {
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    transition: color var(--transition), background var(--transition);
+  }
+  .tab:hover { color: var(--ink); background: var(--surface-2); }
+  .tab.active { color: var(--accent); background: var(--surface); border-bottom: 2px solid var(--accent); margin-bottom: -1px; }
+
+  .empty-state { text-align: center; padding: 48px; color: var(--ink-muted); }
+
+  @media (max-width: 768px) {
+    .player-header { flex-direction: column; text-align: center; }
+    .player-meta { justify-content: center; }
+    .stat-card { padding: 10px 8px; }
+    .stat-card .value { font-size: 20px; }
+    table.data-table { font-size: 12px; }
+    table.data-table th, table.data-table td { padding: 8px 6px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section id="player-profile" class="page" aria-labelledby="player-title">
+  <header class="page-header">
+    <div class="eyebrow">Player Profile</div>
+    <h1 id="player-title">{{ player.name }}</h1>
+    <p class="sub" id="player-sub">{{ player.team }} | {{ player.position }}</p>
+  </header>
+
+  {% if player %}
+  <div class="player-header">
+    <div class="player-avatar">
+      {% if player.name %}
+        {{ player.name.split()|map(attribute='0')|join('')|upper }}
+      {% else %}
+        ?
+      {% endif %}
+    </div>
+    <div class="player-info">
+      <h1>{{ player.name }}</h1>
+      <div class="player-meta">
+        {% if player.team %}
+        <span class="team-badge">{{ player.team }}</span>
+        {% endif %}
+        {% if player.position %}<span><strong>Pos:</strong> {{ player.position }}</span>{% endif %}
+        {% if player.jersey %}<span><strong>#:</strong> {{ player.jersey }}</span>{% endif %}
+        {% if player.height %}<span><strong>Ht:</strong> {{ player.height }}</span>{% endif %}
+        {% if player.weight %}<span><strong>Wt:</strong> {{ player.weight }} lbs</span>{% endif %}
+        {% if player.age %}<span><strong>Age:</strong> {{ player.age }}</span>{% endif %}
+        {% if player.experience %}<span><strong>Exp:</strong> {{ player.experience }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Season Averages Cards -->
+  <div class="stats-grid">
+    <div class="stat-group-label">Fantasy</div>
+    <div class="stat-row">
+      <div class="stat-card fps">
+        <div class="value">{{ player.season_averages.fps }}</div>
+        <div class="label">Avg FPS</div>
+      </div>
+      <div class="stat-card usage">
+        <div class="value">{{ player.season_averages.usage_pct }}%</div>
+        <div class="label">Usage%</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.min }}</div>
+        <div class="label">Min</div>
+      </div>
+    </div>
+
+    <div class="stat-group-label">Last 7 / 14 / 30 Days</div>
+    <div class="stat-row" id="period-fps-row">
+      <div class="stat-card fps" data-period="7d">
+        <div class="value" id="fps-7d">—</div>
+        <div class="label">Last 7 Days <span id="rank-7d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+      </div>
+      <div class="stat-card fps" data-period="14d">
+        <div class="value" id="fps-14d">—</div>
+        <div class="label">Last 14 Days <span id="rank-14d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+      </div>
+      <div class="stat-card fps" data-period="30d">
+        <div class="value" id="fps-30d">—</div>
+        <div class="label">Last 30 Days <span id="rank-30d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+      </div>
+    </div>
+
+    <div class="stat-group-label">Scoring</div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.pts }}</div>
+        <div class="label">PTS</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.reb }}</div>
+        <div class="label">REB</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.ast }}</div>
+        <div class="label">AST</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.stl }}</div>
+        <div class="label">STL</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.blk }}</div>
+        <div class="label">BLK</div>
+      </div>
+      <div class="stat-card bad">
+        <div class="value">{{ player.season_averages.tov }}</div>
+        <div class="label">TOV</div>
+      </div>
+    </div>
+
+    <div class="stat-group-label">Shooting</div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.fg_pct }}%</div>
+        <div class="label">FG%</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.fg3_pct }}%</div>
+        <div class="label">3P%</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{ player.season_averages.ft_pct }}%</div>
+        <div class="label">FT%</div>
+      </div>
+    </div>
+
+    <div class="stat-group-label" style="margin-top:18px;">Custom Date Range</div>
+    <div class="stat-row" style="align-items:end; gap:10px;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <label style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-muted);">From</label>
+        <input type="date" id="dr-from" style="padding:8px; border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13px;">
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <label style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-muted);">To</label>
+        <input type="date" id="dr-to" style="padding:8px; border-radius:var(--radius-sm); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:13px;">
+      </div>
+      <button class="btn btn-primary" id="dr-go" style="padding:8px 16px;">Show Stats</button>
+      <button class="btn btn-ghost" id="dr-reset" style="padding:8px 12px;">Reset</button>
+      <div style="display:flex; gap:4px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="dr-full" style="padding:8px 8px; font-size:11px;">Full Season</button>
+        <button class="btn btn-ghost" id="dr-7d" style="padding:8px 8px; font-size:11px;">Last 7d</button>
+        <button class="btn btn-ghost" id="dr-14d" style="padding:8px 8px; font-size:11px;">Last 14d</button>
+        <button class="btn btn-ghost" id="dr-30d" style="padding:8px 8px; font-size:11px;">Last Month</button>
+      </div>
+    </div>
+    <div id="dr-results" style="margin-top:14px;"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" role="tab" data-tab="totals" aria-selected="true">Season Totals</button>
+  </div>
+
+  <!-- Season Totals Tab -->
+  <div class="section" id="tab-totals" role="tabpanel">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Stat</th>
+            <th>Total</th>
+            <th>Per Game</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Games Played</td><td>{{ player.games_played }}</td><td>—</td></tr>
+          <tr><td>Fantasy Points (FPS)</td><td>{{ player.season_totals.fps }}</td><td>{{ player.season_averages.fps }}</td></tr>
+          <tr><td>Minutes</td><td>{{ player.season_totals.min }}</td><td>{{ player.season_averages.min }}</td></tr>
+          <tr><td>Points</td><td>{{ player.season_totals.pts }}</td><td>{{ player.season_averages.pts }}</td></tr>
+          <tr><td>Rebounds</td><td>{{ player.season_totals.reb }}</td><td>{{ player.season_averages.reb }}</td></tr>
+          <tr><td>Assists</td><td>{{ player.season_totals.ast }}</td><td>{{ player.season_averages.ast }}</td></tr>
+          <tr><td>Steals</td><td>{{ player.season_totals.stl }}</td><td>{{ player.season_averages.stl }}</td></tr>
+          <tr><td>Blocks</td><td>{{ player.season_totals.blk }}</td><td>{{ player.season_averages.blk }}</td></tr>
+          <tr><td>Turnovers</td><td>{{ player.season_totals.tov }}</td><td>{{ player.season_averages.tov }}</td></tr>
+          <tr><td>FGM-FGA</td><td>{{ player.season_totals.fgm }}-{{ player.season_totals.fga }}</td><td>{{ player.season_averages.fg_pct }}%</td></tr>
+          <tr><td>3PM-3PA</td><td>{{ player.season_totals.fg3m }}-{{ player.season_totals.fg3a }}</td><td>{{ player.season_averages.fg3_pct }}%</td></tr>
+          <tr><td>FTM-FTA</td><td>{{ player.season_totals.ftm }}-{{ player.season_totals.fta }}</td><td>{{ player.season_averages.ft_pct }}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <p>Player not found</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top: 16px;">Back to Hub</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const playerId = {{ player.PERSON_ID }};
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('[role="tabpanel"]').forEach(p => p.hidden = true);
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      document.getElementById(`tab-${target}`).hidden = false;
+    });
+  });
+
+  // Date range picker under Shooting
+  function initDateRange() {
+    const go = document.getElementById('dr-go');
+    const reset = document.getElementById('dr-reset');
+    const results = document.getElementById('dr-results');
+
+    // Helper for date formatting
+    const formatDate = (d) => d.toISOString().slice(0, 10);
+    const today = new Date();
+
+    const setRange = (days) => {
+        const d = new Date(today);
+        d.setDate(d.getDate() - days);
+        document.getElementById('dr-from').value = formatDate(d);
+        document.getElementById('dr-to').value = formatDate(today);
+        fetchRange();
+    };
+
+    // Default to last 30 days
+    setRange(30);
+
+    async function fetchRange() {
+      const from = document.getElementById('dr-from').value;
+      const to = document.getElementById('dr-to').value;
+      if (!from || !to) return;
+      try {
+        const res = await fetch(`/api/player/${playerId}/date-range-stats?start_date=${from}&end_date=${to}`);
+        const data = await res.json();
+        renderDateRange(data, results);
+      } catch (e) {
+        console.error(e);
+        results.innerHTML = '<div style="color:var(--bad);font-size:13px;">Failed to load stats</div>';
+      }
+    }
+
+    go.addEventListener('click', fetchRange);
+    reset.addEventListener('click', () => setRange(30));
+    document.getElementById('dr-full').addEventListener('click', () => setRange(365));
+    document.getElementById('dr-7d').addEventListener('click', () => setRange(7));
+    document.getElementById('dr-14d').addEventListener('click', () => setRange(14));
+    document.getElementById('dr-30d').addEventListener('click', () => setRange(30));
+  }
+
+  function renderDateRange(data, container) {
+    if (!data.games || !data.games.length) {
+      container.innerHTML = '<div style="color:var(--ink-muted);font-size:13px;padding:12px;">No games in this range</div>';
+      return;
+    }
+
+    const a = data.averages;
+
+    const rows = data.games.map(g => `
+      <tr>
+        <td>${g.date}</td>
+        <td>${g.opponent}</td>
+        <td>${g.started ? '✓' : '✗'}</td>
+        <td>${g.fps !== undefined ? g.fps.toFixed(1) : '—'}</td>
+        <td>${g.usage_pct !== undefined ? g.usage_pct.toFixed(1) + '%' : '—'}</td>
+        <td>${Math.round(g.min || 0)}</td>
+        <td>${Math.round(g.pts || 0)}</td>
+        <td>${Math.round(g.reb || 0)}</td>
+        <td>${Math.round(g.ast || 0)}</td>
+        <td>${Math.round(g.stl || 0)}</td>
+        <td>${Math.round(g.blk || 0)}</td>
+        <td>${Math.round(g.tov || 0)}</td>
+        <td>${Math.round(g.fgm || 0)}-${Math.round(g.fga || 0)}</td>
+        <td>${Math.round(g.fg3m || 0)}-${Math.round(g.fg3a || 0)}</td>
+        <td>${Math.round(g.ftm || 0)}-${Math.round(g.fta || 0)}</td>
+      </tr>`).join('');
+
+    const avgHtml = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:8px; margin-top:14px;">
+        <div class="stat-card fps"><div class="value" style="font-size:20px;">${a.fps}</div><div class="label">Avg FPS</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.min}</div><div class="label">Min</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.pts}</div><div class="label">PTS</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.reb}</div><div class="label">REB</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ast}</div><div class="label">AST</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg_pct}%</div><div class="label">FG%</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg3_pct}%</div><div class="label">3P%</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ft_pct}%</div><div class="label">FT%</div></div>
+      </div>`;
+
+    container.innerHTML = `
+      <div style="font-size:12px; color:var(--ink-muted); margin-bottom:8px;">${data.games_count} games from ${data.start_date} to ${data.end_date}</div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Date</th><th>Opp</th><th>St</th><th>FPS</th><th>Usage%</th><th>Min</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TOV</th><th>FG</th><th>3P</th><th>FT</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${avgHtml}`;
+  }
+
+  // Ensure DOM is fully loaded before fetching
+  document.addEventListener('DOMContentLoaded', () => {
+    loadPeriodFps();
+  });
+
+  // Load period FPS averages (last 7/14/30 days + overall rank)
+  async function loadPeriodFps() {
+    try {
+      const res = await fetch(`/api/player/${playerId}/period-fps`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.periods) return;
+      for (const [key, p] of Object.entries(data.periods)) {
+        const val = document.getElementById(`fps-${key}`);
+        const rankEl = document.getElementById(`rank-${key}`);
+        if (val) val.textContent = p.avg_fps ? p.avg_fps.toFixed(1) : '—';
+        if (rankEl) {
+          if (p.rank) {
+            rankEl.textContent = `# ${p.rank} / ${p.total_players}`;
+          } else {
+            rankEl.textContent = '';
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error loading period FPS:", e);
+      // Optional: show a user-friendly error in the UI
+      ['7d', '14d', '30d'].forEach(k => {
+          const el = document.getElementById(`fps-${k}`);
+          if (el) el.textContent = 'Err';
+      });
+    }
+  }
+
+  // Initialize on DOM ready
+  document.addEventListener('DOMContentLoaded', () => {
+    initDateRange();
+    loadPeriodFps();
+  });
+</script>
+{% endblock %}

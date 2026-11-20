@@ -98,14 +98,22 @@
     let debounceTimer;
     let selectedIndex = -1;
 
-    // Preload the full player list on focus so the dropdown shows right away
-    input.addEventListener('focus', () => {
-      if (!input.value.trim()) {
-        loadPlayerCache().then(() => {
-          if (playerCache.length) renderAutocomplete(playerCache, input, results);
+        // When a player is selected, navigate to their profile page
+        input.addEventListener('change', () => {
+            const pid = input.dataset.playerId;
+            if (pid) {
+                window.location.href = `/player/${pid}`;
+            }
         });
-      }
-    });
+
+        // Preload the full player list on focus so the dropdown shows right away
+        input.addEventListener('focus', () => {
+            if (!input.value.trim()) {
+                loadPlayerCache().then(() => {
+                    if (playerCache.length) renderAutocomplete(playerCache, input, results);
+                });
+            }
+        });
 
     input.addEventListener('input', () => {
       clearTimeout(debounceTimer);
@@ -673,6 +681,7 @@
   // Initialize on load
   initWeekButtons();
   initDayCheckboxes();
+  setupAutocomplete('global-search', 'search-results');
 
   // ===================================================================
   // ROS Heatmap
@@ -1095,11 +1104,12 @@
       // FPS color: green if >= 25 (avg), red if < 25
       const fpsVal = p.avg_fps ?? 0;
       const fpsClass = fpsVal >= 25 ? 'fps-good' : 'fps-bad';
+      const profileUrl = p.player_id ? `/player/${p.player_id}` : '#';
 
       return `
       <tr>
         <td class="rk-rank num">${idx + 1}</td>
-        <td class="player-name">${p.name}</td>
+        <td class="player-name"><a href="${profileUrl}" class="player-link">${p.name}</a></td>
         <td class="team-abbr">${p.team}</td>
         <td class="rk-gms num">${p.games}</td>
         <td class="num">${p.avg_min ?? 0}</td>

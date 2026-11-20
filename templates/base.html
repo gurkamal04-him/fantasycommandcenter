@@ -17,6 +17,10 @@
       </a>
       <nav class="main-nav" aria-label="Main navigation">
         <ul class="nav-list">
+          <li class="nav-search">
+            <input type="text" id="global-search" placeholder="Search players..." autocomplete="off">
+            <div id="search-results" class="autocomplete"></div>
+          </li>
           <li><a href="{{ url_for('index') }}" class="nav-link {% if request.path == '/' %}active{% endif %}" data-page="hub">Hub</a></li>
           <li><a href="#schedule" class="nav-link" data-page="schedule">Schedule</a></li>
           <li><a href="#boxscore" class="nav-link" data-page="boxscore">Box Score</a></li>

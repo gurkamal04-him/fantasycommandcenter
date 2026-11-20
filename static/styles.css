@@ -120,6 +120,28 @@ a:hover { text-decoration: underline; }
 
 .panel.hoverable:hover { border-color: var(--line-strong); }
 
+.nav-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 16px;
+}
+.nav-search input {
+  padding: 6px 12px;
+  width: 200px;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+}
+.nav-search .autocomplete {
+  top: 100%;
+  left: 0;
+  width: 250px;
+  margin-top: 5px;
+  z-index: 1000;
+}
 .site-header {
   position: sticky;
   top: 0;
@@ -345,6 +367,8 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 .data-table tr:hover td { background: var(--surface-2); }
 .data-table .num { text-align: right; }
 .data-table .player-name { font-weight: 500; }
+.data-table .player-link { color: var(--accent); text-decoration: none; transition: color var(--transition); }
+.data-table .player-link:hover { color: var(--accent-soft); text-decoration: underline; }
 .data-table .team-abbr { font-family: var(--font-display); font-weight: 600; font-size: 12px; color: var(--accent); text-transform: uppercase; }
 .data-table .fps { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--accent); }
 .data-table .usage { color: var(--warn); font-weight: 500; }
