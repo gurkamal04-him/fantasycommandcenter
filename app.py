@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Any, Tuple
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
@@ -887,6 +888,13 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
                 if abbr and score is not None and abbr in team_stats:
                     team_stats[abbr]['points'] = str(score)
 
+        # Get game date/time from header
+        game_date = None
+        for comp in header.get('competitions', []):
+            game_date = comp.get('date')
+            if game_date:
+                break
+
         players = []
         for team_block in boxscore.get('players', []):
             team = team_block.get('team', {})
@@ -916,6 +924,7 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
             'home_team': home_team,
             'away_team': away_team,
             'team_stats': team_stats,
+            'game_date': game_date,
             'source': 'espn',
         }
     except Exception as e:
@@ -1545,9 +1554,23 @@ def player_rankings():
 # API Routes
 # =====================================================================
 
+def get_effective_date_pct():
+    """Get the effective NBA date in Pacific Time.
+    If it's before typical game start (4 PM PT), return yesterday's date.
+    Otherwise return today's date."""
+    pct = ZoneInfo('America/Los_Angeles')
+    now_pct = datetime.now(pct)
+    # NBA games typically start around 4 PM PT earliest
+    game_start_hour = 16  # 4 PM
+    if now_pct.hour < game_start_hour:
+        return (now_pct - timedelta(days=1)).strftime('%Y-%m-%d')
+    return now_pct.strftime('%Y-%m-%d')
+
+
 @app.route('/')
 def index():
-    return render_template('index.html', today=datetime.now().strftime('%Y-%m-%d'), scoring=SCORING)
+    effective_date = get_effective_date_pct()
+    return render_template('index.html', today=effective_date, scoring=SCORING)
 
 
 @app.route('/static/<path:path>')
@@ -1712,13 +1735,94 @@ def box_score(game_id):
     for p in players_data:
         cleaned = {k: (None if isinstance(v, float) and (v != v) else v) for k, v in p.items()}
         cleaned_players.append(cleaned)
-    return jsonify({'game_id': game_id, 'players': cleaned_players})
+
+    # Get game date from the box score data
+    espn_data = get_espn_box_score(espn_id)
+    game_date = espn_data.get('game_date')
+
+    return jsonify({'game_id': game_id, 'players': cleaned_players, 'game_date': game_date})
+
+
+def _build_scoreboard_from_schedules(date_str: str) -> Dict:
+    """Build scoreboard by aggregating all team schedules for a given date.
+    Fallback when direct scoreboard endpoint is blocked."""
+    from datetime import date as date_cls
+    target_date = date_cls.fromisoformat(date_str)
+    season_year = target_date.year + 1 if target_date.month >= 10 else target_date.year
+    season = f"{season_year - 1}-{str(season_year)[2:]}"
+
+    all_teams = get_all_teams()
+    games = []
+    seen_game_ids = set()
+
+    for team in all_teams:
+        team_id = team['id']
+        try:
+            sched = get_espn_team_schedule(team_id, season)
+            if sched.empty:
+                continue
+            for _, row in sched.iterrows():
+                game_date = row.get('GAME_DATE')
+                if hasattr(game_date, 'date'):
+                    game_date = game_date.date()
+                if game_date != target_date:
+                    continue
+
+                game_id = row.get('gameId') or f"{row.get('homeTeam_teamId')}-{row.get('awayTeam_teamId')}-{date_str}"
+                if game_id in seen_game_ids:
+                    continue
+                seen_game_ids.add(game_id)
+
+                home_tricode = row.get('homeTeam_teamTricode', '')
+                away_tricode = row.get('awayTeam_teamTricode', '')
+                home_id = row.get('homeTeam_teamId', 0)
+                away_id = row.get('awayTeam_teamId', 0)
+
+                # Find team info
+                home_team = next((t for t in all_teams if t['id'] == home_id), {})
+                away_team = next((t for t in all_teams if t['id'] == away_id), {})
+
+                # Game time (ISO format)
+                game_datetime = row.get('gameDateTime') or f"{date_str}T19:00Z"  # default 7PM ET
+
+                games.append({
+                    'gameId': game_id,
+                    'nbaGameId': espn_to_nba_id(str(game_id)),
+                    'home': {
+                        'teamId': home_id,
+                        'teamTricode': home_tricode or home_team.get('abbreviation', ''),
+                        'teamCity': home_team.get('location', ''),
+                        'teamName': home_team.get('name', ''),
+                        'score': int(row.get('homeTeam_score', 0) or 0),
+                        'wins': int(row.get('homeTeam_wins', 0) or 0),
+                        'losses': int(row.get('homeTeam_losses', 0) or 0),
+                    },
+                    'away': {
+                        'teamId': away_id,
+                        'teamTricode': away_tricode or away_team.get('abbreviation', ''),
+                        'teamCity': away_team.get('location', ''),
+                        'teamName': away_team.get('name', ''),
+                        'score': int(row.get('awayTeam_score', 0) or 0),
+                        'wins': int(row.get('awayTeam_wins', 0) or 0),
+                        'losses': int(row.get('awayTeam_losses', 0) or 0),
+                    },
+                    'gameStatus': row.get('gameStatus', 'Scheduled'),
+                    'gameStatusText': row.get('gameStatusText', ''),
+                    'gameEt': game_datetime,
+                    'period': 0,
+                    'gameCode': f"{away_tricode} @ {home_tricode}",
+                })
+        except Exception as e:
+            print(f"Error fetching schedule for team {team_id}: {e}")
+            continue
+
+    return {'date': date_str, 'games': games, 'source': 'espn-schedules'}
 
 
 @app.route('/api/scoreboard')
 def scoreboard():
     """Get today's games - uses ESPN public API (stats.nba.com blocks cloud IPs)"""
-    date_str = request.args.get('date', datetime.now().strftime('%Y-%m-%d'))
+    date_str = request.args.get('date', get_effective_date_pct())
     # ESPN expects YYYYMMDD format (no dashes)
     espn_date = date_str.replace('-', '')
 
@@ -1765,7 +1869,15 @@ def scoreboard():
             })
         return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
     except Exception as e:
-        print(f"Error fetching scoreboard from ESPN: {e}")
+        print(f"Error fetching scoreboard from ESPN: {e}, trying schedule fallback...")
+        # Fallback: build scoreboard from team schedules
+        try:
+            fallback_data = _build_scoreboard_from_schedules(date_str)
+            if fallback_data['games']:
+                return jsonify(fallback_data)
+        except Exception as fe:
+            print(f"Schedule fallback also failed: {fe}")
+
         return jsonify({
             'error': 'Failed to fetch scoreboard from ESPN',
             'espn_error': str(e),

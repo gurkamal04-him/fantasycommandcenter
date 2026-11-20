@@ -257,6 +257,15 @@
       const away = g.away || {};
       const status = g.gameStatusText || 'Scheduled';
       const time = g.gameEt || '';
+      let timeDisplay = status;
+      let dateDisplay = '';
+      if (time) {
+        const d = new Date(time);
+        if (!isNaN(d.getTime())) {
+          timeDisplay = formatGameTimePT(time);
+          dateDisplay = d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles'});
+        }
+      }
       return `
         <div class="sb-game">
           <div class="sb-team">
@@ -264,7 +273,8 @@
             <span class="sb-team-record">${away.score !== undefined ? away.score : ''}</span>
           </div>
           <div class="sb-status">
-            <div class="sb-time">${time ? formatGameTimePT(time) : status}</div>
+            ${dateDisplay ? `<div class="sb-date" style="font-size:11px;color:var(--ink-muted);margin-bottom:2px;">${dateDisplay}</div>` : ''}
+            <div class="sb-time">${timeDisplay}</div>
             ${g.gameId ? `<span class="sb-badge" onclick="loadBoxScore('${g.gameId}')" style="cursor:pointer">Box Score</span>` : ''}
           </div>
           <div class="sb-team" style="text-align:right">
@@ -276,13 +286,13 @@
     }).join('');
   }
 
-  // Convert NBA gameEt (Eastern) to Pacific time string (+5h)
+  // Convert ESPN gameEt (ISO UTC) to Pacific time string
   function formatGameTimePT(etStr) {
     if (!etStr) return '';
     const d = new Date(etStr);
     if (isNaN(d.getTime())) return etStr;
-    const pt = new Date(d.getTime() + 5 * 60 * 60 * 1000);
-    return pt.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+    // Use proper timezone conversion to Pacific Time
+    return d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles'});
   }
 
   $('#sb-refresh')?.addEventListener('click', () => loadScoreboard($('#scoreboard-date').value));
@@ -313,6 +323,15 @@
       const away = g.away || {};
       const status = g.gameStatusText || 'Scheduled';
       const time = g.gameEt || '';
+      let timeDisplay = status;
+      let dateDisplay = '';
+      if (time) {
+        const d = new Date(time);
+        if (!isNaN(d.getTime())) {
+          timeDisplay = formatGameTimePT(time);
+          dateDisplay = d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles'});
+        }
+      }
       return `
         <div class="sb-game">
           <div class="sb-team">
@@ -320,7 +339,8 @@
             <span class="sb-team-record">${away.score !== undefined ? away.score : ''}</span>
           </div>
           <div class="sb-status">
-            <div class="sb-time">${time ? formatGameTimePT(time) : status}</div>
+            ${dateDisplay ? `<div class="sb-date" style="font-size:11px;color:var(--ink-muted);margin-bottom:2px;">${dateDisplay}</div>` : ''}
+            <div class="sb-time">${timeDisplay}</div>
             ${g.gameId ? `<button class="btn btn-sm btn-ghost" onclick="loadBoxScore('${g.gameId}')">Box Score</button>` : ''}
           </div>
           <div class="sb-team" style="text-align:right">
@@ -858,7 +878,19 @@
   function renderBoxScore(data) {
     const tbody = $('#boxscore-results tbody');
     const meta = $('#bs-meta');
-    meta.innerHTML = `<span class="bs-meta-item"><strong>Game ID:</strong> ${data.game_id}</span><span class="bs-meta-item"><strong>Players:</strong> ${data.players.length}</span>`;
+    let metaHtml = `<span class="bs-meta-item"><strong>Game ID:</strong> ${data.game_id}</span><span class="bs-meta-item"><strong>Players:</strong> ${data.players.length}</span>`;
+
+    // Display game date/time in PCT if available
+    if (data.game_date) {
+      const d = new Date(data.game_date);
+      if (!isNaN(d.getTime())) {
+        const pctTime = d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles'});
+        const pctDate = d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles'});
+        metaHtml += `<span class="bs-meta-item"><strong>Game Time (PCT):</strong> ${pctDate} ${pctTime}</span>`;
+      }
+    }
+
+    meta.innerHTML = metaHtml;
 
     bsPlayersData = data.players || [];
     sortAndRenderBoxScore();
