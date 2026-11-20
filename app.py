@@ -181,28 +181,54 @@ _FALLBACK_PLAYERS = [
 
 @lru_cache(maxsize=32)
 def get_all_players() -> List[Dict]:
-    """Get all current-season players with team info from ESPN rosters."""
+    """Get all current-season players with team info from ESPN rosters.
+
+    Fetches all 30 team rosters in parallel — serially this takes ~6s,
+    which is a big chunk of every page load that needs the player list.
+    """
     all_teams = get_all_teams()
-    players = []
-    for team in all_teams:
+
+    def _fetch_roster(team):
         tid = team['id']
-        try:
-            resp = requests.get(
-                f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{tid}/roster",
-                headers=ESPN_HEADERS,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            for athlete in data.get('athletes', []):
-                players.append({
-                    'PERSON_ID': int(athlete.get('id', 0)),
-                    'DISPLAY_FIRST_LAST': athlete.get('displayName', ''),
-                    'TEAM_ID': tid,
-                    'TEAM_ABBREVIATION': team['abbreviation'],
-                })
-        except Exception as e:
-            print(f"Error fetching roster for team {tid}: {e}")
+        # ESPN intermittently 403s on roster endpoints; retry a couple times
+        # with a short backoff before giving up on that team.
+        for attempt in range(3):
+            try:
+                resp = requests.get(
+                    f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{tid}/roster",
+                    headers=ESPN_HEADERS,
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return [
+                        {
+                            'PERSON_ID': int(athlete.get('id', 0)),
+                            'DISPLAY_FIRST_LAST': athlete.get('displayName', ''),
+                            'TEAM_ID': tid,
+                            'TEAM_ABBREVIATION': team['abbreviation'],
+                        }
+                        for athlete in data.get('athletes', [])
+                    ]
+                if resp.status_code in (403, 429) and attempt < 2:
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                print(f"Error fetching roster for team {tid}: HTTP {resp.status_code}")
+                return []
+            except Exception as e:
+                if attempt < 2:
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+                print(f"Error fetching roster for team {tid}: {e}")
+                return []
+        return []
+
+    # Parallelize the 30 roster HTTP calls — ESPN is the bottleneck, not CPU.
+    # Keep concurrency modest (8) so we don't trip ESPN's rate limiter.
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(_fetch_roster, all_teams))
+
+    players = [p for roster in results for p in roster]
     if not players:
         return _FALLBACK_PLAYERS
     return players
@@ -859,6 +885,34 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
         return {'players': [], 'source': 'espn', 'error': str(e)}
 
 
+def _get_espn_team_schedule_retry(team_id: int, season: str = '2026-27') -> pd.DataFrame:
+    """Call get_espn_team_schedule with retry on transient 403/429.
+
+    ESPN intermittently rate-limits schedule requests. Retrying a couple of
+    times with a short backoff turns a hard failure into a recoverable one,
+    which matters most in the parallel all-teams-schedule fetch.
+
+    Note: get_espn_team_schedule is lru_cached, so a 403 must raise (not
+    return an empty frame) or the failure gets cached and retries are no-ops.
+    """
+    for attempt in range(3):
+        try:
+            df = get_espn_team_schedule(team_id, season)
+            if not df.empty:
+                return df
+            # Empty result may be a transient 403 — retry before giving up.
+            if attempt < 2:
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            return df
+        except Exception:
+            if attempt < 2:
+                time.sleep(0.4 * (attempt + 1))
+                continue
+            raise
+    return pd.DataFrame()
+
+
 @lru_cache(maxsize=64)
 def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFrame:
     """
@@ -879,6 +933,10 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
             f"teams/{team_id}/schedule?season={season_year}"
         )
         resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
+        if resp.status_code in (403, 429):
+            # Raise so the lru_cache doesn't cache the failure and the
+            # _get_espn_team_schedule_retry wrapper can actually retry.
+            raise RuntimeError(f"ESPN schedule HTTP {resp.status_code}")
         resp.raise_for_status()
         data = resp.json()
 
@@ -939,13 +997,20 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
 
 @lru_cache(maxsize=16)
 def get_espn_all_teams_schedule(season: str = '2026-27') -> pd.DataFrame:
-    """Get the full-season schedule for every team from ESPN (cached)."""
+    """Get the full-season schedule for every team from ESPN (cached).
+
+    Fetches all 30 team schedules in parallel — serially this is ~3.5s and
+    it's on the hot path for rankings and streamers.
+    """
     all_teams = get_all_teams()
-    frames = []
-    for team in all_teams:
-        df = get_espn_team_schedule(team['id'], season)
-        if not df.empty:
-            frames.append(df)
+
+    def _fetch(team):
+        df = _get_espn_team_schedule_retry(team['id'], season)
+        return df if not df.empty else None
+
+    # Modest concurrency — ESPN rate-limits hard bursts of parallel calls.
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        frames = [f for f in executor.map(_fetch, all_teams) if f is not None]
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
