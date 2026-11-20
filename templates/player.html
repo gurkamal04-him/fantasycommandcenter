@@ -254,19 +254,25 @@
       </div>
     </div>
 
-    <div class="stat-group-label">Last 7 / 14 / 30 Days</div>
+<div class="stat-group-label" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Last 7 / 14 / 30 Days</span>
+      <select id="fps-mode" style="font-size:10px; padding:2px; border-radius:4px; border:1px solid var(--line); background:var(--surface);">
+        <option value="avg">Per Game</option>
+        <option value="total">Total</option>
+      </select>
+    </div>
     <div class="stat-row" id="period-fps-row">
       <div class="stat-card fps" data-period="7d">
         <div class="value" id="fps-7d">—</div>
-        <div class="label">Last 7 Days <span id="rank-7d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+        <div class="label">Last 7d <span id="rank-7d" style="font-size:10px;color:var(--ink-muted)"></span></div>
       </div>
       <div class="stat-card fps" data-period="14d">
         <div class="value" id="fps-14d">—</div>
-        <div class="label">Last 14 Days <span id="rank-14d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+        <div class="label">Last 14d <span id="rank-14d" style="font-size:10px;color:var(--ink-muted)"></span></div>
       </div>
       <div class="stat-card fps" data-period="30d">
         <div class="value" id="fps-30d">—</div>
-        <div class="label">Last 30 Days <span id="rank-30d" style="font-size:10px;color:var(--ink-muted)"></span></div>
+        <div class="label">Last 30d <span id="rank-30d" style="font-size:10px;color:var(--ink-muted)"></span></div>
       </div>
     </div>
 
@@ -435,10 +441,20 @@
 
     go.addEventListener('click', fetchRange);
     reset.addEventListener('click', () => setRange(30));
-    document.getElementById('dr-full').addEventListener('click', () => setRange(365));
+    document.getElementById('dr-full').addEventListener('click', () => {
+        document.getElementById('dr-from').value = '2026-10-01';
+        document.getElementById('dr-to').value = formatDate(today);
+        fetchRange();
+    });
     document.getElementById('dr-7d').addEventListener('click', () => setRange(7));
     document.getElementById('dr-14d').addEventListener('click', () => setRange(14));
-    document.getElementById('dr-30d').addEventListener('click', () => setRange(30));
+    document.getElementById('dr-30d').addEventListener('click', () => {
+        const d = new Date(today);
+        d.setMonth(d.getMonth() - 1);
+        document.getElementById('dr-from').value = formatDate(d);
+        document.getElementById('dr-to').value = formatDate(today);
+        fetchRange();
+    });
   }
 
   function renderDateRange(data, container) {
@@ -449,13 +465,19 @@
 
     const a = data.averages;
 
-    const rows = data.games.map(g => `
+    const rows = data.games.map(g => {
+      const fps = g.fps !== undefined ? g.fps : null;
+      const usage = g.usage_pct !== undefined ? g.usage_pct : null;
+      const pos = g.start_position || (g.started ? 'Y' : '');
+      const fpsColor = fps !== null ? (fps >= 25 ? '#22c55e' : fps >= 15 ? '#f59e0b' : '#ef4444') : 'var(--ink-muted)';
+      const usageColor = usage !== null ? (usage >= 25 ? '#22c55e' : usage >= 15 ? '#f59e0b' : '#ef4444') : 'var(--ink-muted)';
+      return `
       <tr>
         <td>${g.date}</td>
         <td>${g.opponent}</td>
-        <td>${g.started ? '✓' : '✗'}</td>
-        <td>${g.fps !== undefined ? g.fps.toFixed(1) : '—'}</td>
-        <td>${g.usage_pct !== undefined ? g.usage_pct.toFixed(1) + '%' : '—'}</td>
+        <td>${pos}</td>
+        <td style="color:${fpsColor};font-weight:600;">${fps !== null ? fps.toFixed(1) : '—'}</td>
+        <td style="color:${usageColor};font-weight:600;">${usage !== null ? usage.toFixed(1) + '%' : '—'}</td>
         <td>${Math.round(g.min || 0)}</td>
         <td>${Math.round(g.pts || 0)}</td>
         <td>${Math.round(g.reb || 0)}</td>
@@ -466,18 +488,19 @@
         <td>${Math.round(g.fgm || 0)}-${Math.round(g.fga || 0)}</td>
         <td>${Math.round(g.fg3m || 0)}-${Math.round(g.fg3a || 0)}</td>
         <td>${Math.round(g.ftm || 0)}-${Math.round(g.fta || 0)}</td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
     const avgHtml = `
       <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:8px; margin-top:14px;">
-        <div class="stat-card fps"><div class="value" style="font-size:20px;">${a.fps}</div><div class="label">Avg FPS</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.min}</div><div class="label">Min</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.pts}</div><div class="label">PTS</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.reb}</div><div class="label">REB</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ast}</div><div class="label">AST</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg_pct}%</div><div class="label">FG%</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg3_pct}%</div><div class="label">3P%</div></div>
-        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ft_pct}%</div><div class="label">FT%</div></div>
+        <div class="stat-card fps"><div class="value" style="font-size:20px;color:${a.fps >= 25 ? '#22c55e' : a.fps >= 15 ? '#f59e0b' : '#ef4444'};">${a.fps.toFixed(1)}</div><div class="label">Avg FPS</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.min.toFixed(1)}</div><div class="label">Min</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.pts.toFixed(1)}</div><div class="label">PTS</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.reb.toFixed(1)}</div><div class="label">REB</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ast.toFixed(1)}</div><div class="label">AST</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg_pct.toFixed(1)}%</div><div class="label">FG%</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.fg3_pct.toFixed(1)}%</div><div class="label">3P%</div></div>
+        <div class="stat-card"><div class="value" style="font-size:20px;">${a.ft_pct.toFixed(1)}%</div><div class="label">FT%</div></div>
       </div>`;
 
     container.innerHTML = `
@@ -495,33 +518,47 @@
   });
 
   // Load period FPS averages (last 7/14/30 days + overall rank)
+  window.lastPeriodFpsData = null;
   async function loadPeriodFps() {
     try {
       const res = await fetch(`/api/player/${playerId}/period-fps`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       if (!data.periods) return;
-      for (const [key, p] of Object.entries(data.periods)) {
-        const val = document.getElementById(`fps-${key}`);
-        const rankEl = document.getElementById(`rank-${key}`);
-        if (val) val.textContent = p.avg_fps ? p.avg_fps.toFixed(1) : '—';
-        if (rankEl) {
-          if (p.rank) {
-            rankEl.textContent = `# ${p.rank} / ${p.total_players}`;
-          } else {
-            rankEl.textContent = '';
-          }
-        }
-      }
+      window.lastPeriodFpsData = data.periods;
+      renderPeriodFps();
     } catch (e) {
       console.error("Error loading period FPS:", e);
-      // Optional: show a user-friendly error in the UI
       ['7d', '14d', '30d'].forEach(k => {
           const el = document.getElementById(`fps-${k}`);
           if (el) el.textContent = 'Err';
       });
     }
   }
+
+  function renderPeriodFps() {
+    if (!window.lastPeriodFpsData) return;
+    const mode = document.getElementById('fps-mode').value;
+    for (const [key, p] of Object.entries(window.lastPeriodFpsData)) {
+      const val = document.getElementById(`fps-${key}`);
+      const rankEl = document.getElementById(`rank-${key}`);
+      if (val) {
+        const fps = mode === 'avg' ? p.avg_fps : (p.avg_fps * p.games);
+        val.textContent = fps ? fps.toFixed(1) : '—';
+        val.style.color = fps >= 25 ? '#22c55e' : fps >= 15 ? '#f59e0b' : '#ef4444';
+        val.style.fontWeight = '600';
+      }
+      if (rankEl) {
+        if (p.rank) {
+            rankEl.textContent = `# ${p.rank} / ${p.total_players}`;
+        } else {
+            rankEl.textContent = '';
+        }
+      }
+    }
+  }
+
+  document.getElementById('fps-mode').addEventListener('change', renderPeriodFps);
 
   // Initialize on DOM ready
   document.addEventListener('DOMContentLoaded', () => {

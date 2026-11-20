@@ -427,9 +427,11 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
                     away_abbr = row.get('awayTeam_teamTricode', '')
                     p_team = p.get('teamAbbrev', '')
                     if home_abbr and away_abbr:
-                        opp = away_abbr if p_team == home_abbr else home_abbr
-                        p['matchup'] = f"{p_team} vs {opp}"
+                        is_home = p_team == home_abbr
+                        opp = away_abbr if is_home else home_abbr
+                        p['matchup'] = f"{p_team} {'vs' if is_home else '@'} {opp}"
                         p['opp_abbr'] = opp
+                        p['is_home'] = is_home
                     games.append(p)
                     break
 
@@ -446,6 +448,10 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
                 'GAME_ID': g.get('gameId', gid),
                 'GAME_DATE': g.get('gameDate', ''),
                 'MATCHUP': g.get('matchup', ''),
+                'IS_HOME': g.get('is_home', True),
+                'START_POSITION': g.get('position', '') or '',
+                'STARTER': g.get('starter', False),
+                'DID_NOT_PLAY': g.get('didNotPlay', False),
                 'WL': 'W' if g.get('plusMinus', 0) > 0 else 'L',
                 'MIN': g.get('minutes', 0),
                 'PTS': g.get('points', 0),
@@ -2276,14 +2282,19 @@ def player_date_range_stats(player_id):
             matchup = row.get('MATCHUP', '')
             # Determine home/away and format opponent
             # MATCHUP format: "PHI vs NY" (home) or "PHI @ NY" (away)
-            is_home = ' vs ' in matchup
-            opp_parts = matchup.split(' vs ' if is_home else ' @ ')
-            opponent_abbr = opp_parts[1] if len(opp_parts) > 1 else matchup
+            is_home = bool(row.get('IS_HOME', ' vs ' in matchup))
+            if ' vs ' in matchup or ' @ ' in matchup:
+                opp_parts = matchup.split(' vs ' if is_home else ' @ ')
+                opponent_abbr = opp_parts[1] if len(opp_parts) > 1 else matchup
+            else:
+                opponent_abbr = matchup
             opponent_display = f"{'vs' if is_home else '@'} {opponent_abbr}"
 
             # Determine if started - if MIN > 0 and not DNP
             mins = float(row.get('MIN', 0))
-            started = mins > 0
+            did_not_play = bool(row.get('DID_NOT_PLAY', False))
+            started = mins > 0 and not did_not_play
+            start_position = str(row.get('START_POSITION', '') or '')
 
             # Calculate FPS and usage
             fps = calc_fps(row)
@@ -2307,6 +2318,7 @@ def player_date_range_stats(player_id):
                 'ftm': int(row.get('FTM', 0) or 0),
                 'fta': int(row.get('FTA', 0) or 0),
                 'started': started,
+                'start_position': start_position,
                 'fps': round(fps, 1),
                 'usage_pct': round(usage, 1),
             })
