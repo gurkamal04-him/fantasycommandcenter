@@ -23,39 +23,6 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
 
-
-# --- Shared-password gate (HTTP Basic Auth) ---
-import secrets
-from flask import Response
-
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-_FAILED = {}                    # visitor IP -> times of recent wrong passwords
-_MAX_FAILS, _WINDOW = 10, 600   # lock out after 10 wrong tries in 10 minutes
-
-
-@app.before_request
-def require_password():
-    ip = request.headers.get("CF-Connecting-IP", request.remote_addr)
-    now = time.time()
-    recent = [t for t in _FAILED.get(ip, []) if now - t < _WINDOW]
-    if len(recent) >= _MAX_FAILS:
-        return Response("Too many attempts. Try again later.", 429)
-
-    auth = request.authorization
-    supplied = (auth.password or "") if auth else ""
-    if APP_PASSWORD and secrets.compare_digest(supplied.encode(), APP_PASSWORD.encode()):
-        _FAILED.pop(ip, None)
-        return None  # correct password: let the request through
-
-    if auth:
-        recent.append(now)  # count wrong passwords only, not the first prompt
-    if recent:
-        _FAILED[ip] = recent
-    else:
-        _FAILED.pop(ip, None)
-    return Response("Password required", 401,
-                    {"WWW-Authenticate": 'Basic realm="Fantasy Command Center"'})
-
 # =====================================================================
 # Scoring Configuration (Points League Custom)
 # =====================================================================
