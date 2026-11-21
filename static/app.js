@@ -32,16 +32,52 @@
   // /api/ready returns {"ready": true}.
   // ===================================================================
   const loadingOverlay = $('#loading-overlay');
+  const loadingSub = $('#loading-sub');
+  const loadingStage = $('#loading-stage');
+  const loadingBarFill = $('#loading-bar-fill');
+  const loadingPercent = $('#loading-percent');
+  const loadingEta = $('#loading-eta');
   let readyPollTimer = null;
+
+  function formatEta(seconds) {
+    if (seconds === null || seconds === undefined || seconds <= 0) return '—';
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+  }
 
   async function checkReady() {
     try {
       const r = await fetch('/api/ready', { cache: 'no-store' });
-      if (!r.ok) return false;
+      if (!r.ok) return { ready: false };
       const data = await r.json();
+
+      // Update UI with progress info
+      if (loadingBarFill && data.progress !== undefined) {
+        loadingBarFill.style.width = `${data.progress}%`;
+      }
+      if (loadingPercent && data.progress !== undefined) {
+        loadingPercent.textContent = `${data.progress}%`;
+      }
+      if (loadingStage && data.stage) {
+        loadingStage.textContent = data.stage.charAt(0).toUpperCase() + data.stage.slice(1) + '…';
+      }
+      if (loadingEta && data.eta_seconds !== undefined) {
+        loadingEta.textContent = formatEta(data.eta_seconds);
+      }
+      if (loadingSub && data.stage) {
+        // Update sub text based on stage
+        const stageText = data.stage.toLowerCase();
+        if (stageText.includes('schedule')) loadingSub.textContent = 'Fetching team schedules…';
+        else if (stageText.includes('computing')) loadingSub.textContent = 'Computing player rankings…';
+        else if (stageText.includes('finaliz')) loadingSub.textContent = 'Finalizing…';
+        else if (data.ready) loadingSub.textContent = 'Ready!';
+      }
+
       return !!data.ready;
     } catch (e) {
-      return false;
+      return { ready: false };
     }
   }
 
@@ -58,12 +94,16 @@
 
   async function pollReady() {
     if (!loadingOverlay) return;
-    const ready = await checkReady();
-    if (ready) {
-      dismissLoading();
+    const result = await checkReady();
+    if (result.ready) {
+      // Show 100% briefly before dismissing
+      if (loadingBarFill) loadingBarFill.style.width = '100%';
+      if (loadingPercent) loadingPercent.textContent = '100%';
+      if (loadingEta) loadingEta.textContent = 'Done';
+      setTimeout(dismissLoading, 300);
       return;
     }
-    readyPollTimer = setTimeout(pollReady, 1500);
+    readyPollTimer = setTimeout(pollReady, 1000);
   }
 
   // Kick off the readiness poll as soon as the script runs. If the server

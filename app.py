@@ -64,17 +64,62 @@ _RK_COMMON_PERIODS = ('season', '2weeks', '1week')
 _READY = False
 _READY_LOCK = threading.Lock()
 
+# Progress tracking for the loading screen
+_LOAD_PROGRESS = 0
+_LOAD_START_TIME = None
+_LOAD_STAGE = "initializing"
+_LOAD_STAGE_LOCK = threading.Lock()
+
 
 def set_ready() -> None:
     """Mark the app as warmed up and ready to serve traffic."""
-    global _READY
+    global _READY, _LOAD_PROGRESS, _LOAD_STAGE
     with _READY_LOCK:
         _READY = True
+    with _LOAD_STAGE_LOCK:
+        _LOAD_PROGRESS = 100
+        _LOAD_STAGE = "complete"
 
 
 def is_ready() -> bool:
     with _READY_LOCK:
         return _READY
+
+
+def get_load_progress() -> dict:
+    """Get current loading progress with ETA estimation."""
+    with _LOAD_STAGE_LOCK:
+        progress = _LOAD_PROGRESS
+        stage = _LOAD_STAGE
+        start_time = _LOAD_START_TIME
+
+    elapsed = 0
+    eta_seconds = None
+    if start_time:
+        elapsed = time.time() - start_time
+        if progress > 0 and progress < 100:
+            # Estimate total time based on current progress
+            estimated_total = elapsed * 100 / progress
+            eta_seconds = max(0, estimated_total - elapsed)
+
+    return {
+        "ready": _READY,
+        "progress": progress,
+        "stage": stage,
+        "elapsed_seconds": round(elapsed, 1),
+        "eta_seconds": round(eta_seconds, 1) if eta_seconds else None,
+    }
+
+
+def set_load_progress(progress: int, stage: str = "") -> None:
+    """Update loading progress and stage."""
+    global _LOAD_PROGRESS, _LOAD_STAGE, _LOAD_START_TIME
+    with _LOAD_STAGE_LOCK:
+        if _LOAD_START_TIME is None:
+            _LOAD_START_TIME = time.time()
+        _LOAD_PROGRESS = max(0, min(100, progress))
+        if stage:
+            _LOAD_STAGE = stage
 
 
 def _rk_key(period: str, season: str, start_date: str, end_date: str) -> str:
@@ -99,12 +144,17 @@ def warm_rankings(period: str = 'season', season: str = '2026-27',
             _RANKINGS_WARMING.add(k)
 
     try:
-        for k in keys:
+        set_load_progress(10, "fetching team schedules")
+        for i, k in enumerate(keys):
             p, s, sd, ed = k.split('|')
+            # Progress: 10% to 90% across the keys
+            base = 10 + (i * 80 // max(1, len(keys)))
+            set_load_progress(base, f"computing {p} rankings")
             result = get_player_rankings(p, s, sd, ed)
             with _RANKINGS_LOCK:
                 _RANKINGS_CACHE[k] = result
                 _RANKINGS_WARMING.discard(k)
+        set_load_progress(95, "finalizing")
         set_ready()
     except Exception as e:
         with _RANKINGS_LOCK:
@@ -1804,11 +1854,10 @@ def period_label(period: str, start_date: str, end_date: str) -> str:
 def app_ready():
     """Readiness probe for the frontend "Please Wait" overlay.
 
-    Returns {"ready": true} once the initial warm-up is complete, and
-    {"ready": false} while it's still running. The frontend polls this on
-    startup and only removes the overlay when it sees true.
+    Returns progress info including percentage, stage, elapsed time, and ETA.
+    The frontend polls this on startup and only removes the overlay when ready=true.
     """
-    return jsonify({'ready': is_ready()})
+    return jsonify(get_load_progress())
 
 
 @app.route('/api/player-rankings')
