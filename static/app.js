@@ -136,6 +136,10 @@
   const navLinks = $$('.nav-link[data-page]');
 
   function activatePage(pageId) {
+    const target = $(`#${pageId}`);
+    // If target doesn't exist on this page, don't try to activate it (e.g. on player profile)
+    if (!target) return;
+
     pages.forEach(p => p.hidden = p.id !== pageId);
     navLinks.forEach(l => l.classList.toggle('active', l.dataset.page === pageId));
     window.scrollTo(0, 0);
@@ -143,8 +147,13 @@
 
   navLinks.forEach(link => {
     link.addEventListener('click', e => {
-      // Allow normal navigation for Hub (href="/") - it's a full page reload
+      // Only hijack clicks if we're on the main hub page. On player profiles
+      // or other sub-pages, we want normal navigation back to /#section.
+      if (window.location.pathname !== '/') return;
+
+      // Allow normal navigation for Hub (href="/")
       if (link.getAttribute('href') === '/') return;
+
       e.preventDefault();
       activatePage(link.dataset.page);
     });
@@ -177,7 +186,7 @@
     }
   }
 
-  function setupAutocomplete(inputId, resultsId) {
+  function setupAutocomplete(inputId, resultsId, { redirect = true } = {}) {
     const input = $(`#${inputId}`);
     const results = $(`#${resultsId}`);
     if (!input || !results) return;
@@ -185,13 +194,18 @@
     let debounceTimer;
     let selectedIndex = -1;
 
-        // When a player is selected, navigate to their profile page
-        input.addEventListener('change', () => {
-            const pid = input.dataset.playerId;
-            if (pid) {
-                window.location.href = `/player/${pid}`;
-            }
-        });
+    // When a player is selected, optionally navigate to their profile page.
+    // Only the top global-search box should redirect; the Start/Sit, Trade
+    // Analyzer and Minutes Slider boxes need to stay on the current page so
+    // they remain usable (they fill a field rather than navigate away).
+    if (redirect) {
+      input.addEventListener('change', () => {
+        const pid = input.dataset.playerId;
+        if (pid) {
+          window.location.href = `/player/${pid}`;
+        }
+      });
+    }
 
         // Preload the full player list on focus so the dropdown shows right away
         input.addEventListener('focus', () => {
@@ -265,8 +279,8 @@
     if (selectedIndex >= 0) items[selectedIndex].scrollIntoView({ block: 'nearest' });
   }
 
-  setupAutocomplete('ss-player-a', 'ss-ac-a');
-  setupAutocomplete('ss-player-b', 'ss-ac-b');
+  setupAutocomplete('ss-player-a', 'ss-ac-a', { redirect: false });
+  setupAutocomplete('ss-player-b', 'ss-ac-b', { redirect: false });
 
   // ===================================================================
   // Trade Analyzer - autocomplete for roster inputs
@@ -281,7 +295,7 @@
     ac.id = acId;
     ac.hidden = true;
     input.parentNode.insertBefore(ac, input.nextSibling);
-    setupAutocomplete(input.id || (input.id = `trade-input-${tradeAcCount}`), acId);
+    setupAutocomplete(input.id || (input.id = `trade-input-${tradeAcCount}`), acId, { redirect: false });
   }
 
   // Attach autocomplete to existing trade roster inputs
@@ -1532,7 +1546,7 @@
   let msData = null;
   let msPlayerId = null;
 
-  setupAutocomplete('ms-player', 'ms-ac');
+  setupAutocomplete('ms-player', 'ms-ac', { redirect: false });
 
   async function loadMinutesProjection(pid) {
     const panel = $('#minutes-results');

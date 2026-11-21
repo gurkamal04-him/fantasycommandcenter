@@ -1973,14 +1973,11 @@ def player_profile_page(player_id):
     team_id = player.get('TEAM_ID')
     team_info = next((t for t in get_all_teams() if t['id'] == team_id), {})
 
-    # Get basic player info for the template
-    # Fetch season averages to display in cards.
-    # NOTE: n is capped at 30 — fetching 82 box scores (one ESPN request per
-    # completed game) serially blows past the 512MB/30s limits on Render's
-    # free tier and gets the gunicorn worker OOM-killed. The parallel fetcher
-    # below also caps concurrency so a single request can't exhaust memory.
-    n = min(request.args.get('n', 30, type=int), 30)
-    df = get_player_gamelog_parallel(player_id, n_games=n)
+    # Get basic player info for the template. Fetch season averages.
+    # We fetch up to 100 games to ensure full season history is available.
+    # The parallel fetcher handles this efficiently.
+    n = min(request.args.get('n', 100, type=int), 100)
+    df = get_player_gamelog_parallel(player_id, n_games=n, team_id=team_id)
 
     games_played = 0
     total_fps = 0.0
@@ -1999,11 +1996,17 @@ def player_profile_page(player_id):
     total_ftm = 0
     total_fta = 0
 
+    gamelog_data = []
     if not df.empty:
         games_played = len(df)
+        # Format gamelog for template
         for _, row in df.iterrows():
-            total_fps += calc_fps(row)
-            total_usage += calc_usage_pct(row)
+            fps = calc_fps(row)
+            usage = calc_usage_pct(row)
+
+            # Update totals
+            total_fps += fps
+            total_usage += usage
             total_min += float(row.get('MIN', row.get('minutes', 0)))
             total_pts += float(row.get('PTS', row.get('points', 0)))
             total_reb += float(row.get('REB', row.get('rebounds', 0)))
@@ -2018,6 +2021,26 @@ def player_profile_page(player_id):
             total_ftm += float(row.get('FTM', 0))
             total_fta += float(row.get('FTA', 0))
 
+            # Prepare row for display
+            gamelog_data.append({
+                'date': row.get('GAME_DATE', ''),
+                'matchup': row.get('MATCHUP', ''),
+                'fps': round(fps, 1),
+                'min': row.get('MIN', 0),
+                'pts': row.get('PTS', 0),
+                'reb': row.get('REB', 0),
+                'ast': row.get('AST', 0),
+                'stl': row.get('STL', 0),
+                'blk': row.get('BLK', 0),
+                'tov': row.get('TOV', 0),
+                'fgm': row.get('FGM', 0),
+                'fga': row.get('FGA', 0),
+                'fg3m': row.get('FG3M', 0),
+                'fg3a': row.get('FG3A', 0),
+                'ftm': row.get('FTM', 0),
+                'fta': row.get('FTA', 0),
+            })
+
     player_data = {
         'PERSON_ID': player_id,
         'name': player.get('DISPLAY_FIRST_LAST', ''),
@@ -2031,6 +2054,7 @@ def player_profile_page(player_id):
         'age': player.get('AGE', ''),
         'experience': player.get('EXPERIENCE', ''),
         'games_played': games_played,
+        'gamelog': gamelog_data,
         'season_averages': {
             'fps': round(total_fps / games_played, 1) if games_played else 0,
             'usage_pct': round(total_usage / games_played, 1) if games_played else 0,

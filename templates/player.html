@@ -346,6 +346,7 @@
   <!-- Tabs -->
   <div class="tabs" role="tablist">
     <button class="tab active" role="tab" data-tab="totals" aria-selected="true">Season Totals</button>
+    <button class="tab" role="tab" data-tab="gamelog" aria-selected="false">Recent Games</button>
   </div>
 
   <!-- Season Totals Tab -->
@@ -372,6 +373,50 @@
           <tr><td>FGM-FGA</td><td>{{ player.season_totals.fgm }}-{{ player.season_totals.fga }}</td><td>{{ player.season_averages.fg_pct }}%</td></tr>
           <tr><td>3PM-3PA</td><td>{{ player.season_totals.fg3m }}-{{ player.season_totals.fg3a }}</td><td>{{ player.season_averages.fg3_pct }}%</td></tr>
           <tr><td>FTM-FTA</td><td>{{ player.season_totals.ftm }}-{{ player.season_totals.fta }}</td><td>{{ player.season_averages.ft_pct }}%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Game Log Tab -->
+  <div class="section" id="tab-gamelog" role="tabpanel" hidden>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Matchup</th>
+            <th>FPS</th>
+            <th>MIN</th>
+            <th>PTS</th>
+            <th>REB</th>
+            <th>AST</th>
+            <th>STL</th>
+            <th>BLK</th>
+            <th>TOV</th>
+            <th>FG</th>
+            <th>3P</th>
+            <th>FT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for game in player.gamelog %}
+          <tr>
+            <td>{{ game.date }}</td>
+            <td>{{ game.matchup }}</td>
+            <td style="font-weight:600; color:var(--accent);">{{ game.fps }}</td>
+            <td>{{ game.min }}</td>
+            <td>{{ game.pts }}</td>
+            <td>{{ game.reb }}</td>
+            <td>{{ game.ast }}</td>
+            <td>{{ game.stl }}</td>
+            <td>{{ game.blk }}</td>
+            <td>{{ game.tov }}</td>
+            <td>{{ game.fgm }}-{{ game.fga }}</td>
+            <td>{{ game.fg3m }}-{{ game.fg3a }}</td>
+            <td>{{ game.ftm }}-{{ game.fta }}</td>
+          </tr>
+          {% endfor %}
         </tbody>
       </table>
     </div>
