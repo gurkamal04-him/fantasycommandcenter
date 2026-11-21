@@ -6,6 +6,71 @@
   <title>{% block title %}NBA Fantasy Command Center{% endblock %}</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <style>
+    /* Loading overlay — covers the page until /api/ready returns true */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg, #0f1419);
+      color: var(--ink, #e6e9ef);
+      font-family: var(--font, 'Inter', system-ui, sans-serif);
+    }
+    .loading-card {
+      text-align: center;
+      padding: 32px 40px;
+      border-radius: 16px;
+      background: var(--surface, #1a2028);
+      border: 1px solid var(--line, #2a313b);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      max-width: 360px;
+    }
+    .loading-logo {
+      font-size: 40px;
+      color: var(--accent, #6ea8ff);
+      margin-bottom: 12px;
+    }
+    .loading-title {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: var(--font-display, 'Barlow Condensed', sans-serif);
+      margin-bottom: 4px;
+    }
+    .loading-sub {
+      font-size: 13px;
+      color: var(--ink-soft, #9aa4b2);
+      margin-bottom: 20px;
+    }
+    .loading-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--surface-2, #232a33);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .loading-bar-fill {
+      height: 100%;
+      width: 40%;
+      border-radius: 3px;
+      background: var(--accent, #6ea8ff);
+      animation: loading-progress 1.4s ease-in-out infinite;
+    }
+    @keyframes loading-progress {
+      0% { transform: translateX(-150%); }
+      100% { transform: translateX(250%); }
+    }
+    .loading-note {
+      font-size: 12px;
+      color: var(--ink-muted, #6b7583);
+      line-height: 1.5;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .loading-bar-fill { animation: none; width: 100%; }
+    }
+  </style>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -33,6 +98,19 @@
       </nav>
     </div>
   </header>
+
+  <!-- Loading overlay: shown while the server warms up its caches. The
+       frontend polls /api/ready and removes this once it returns true. -->
+  <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite" aria-busy="true">
+    <div class="loading-card">
+      <div class="loading-logo">▲</div>
+      <div class="loading-title">Fantasy Command Center</div>
+      <div class="loading-sub">Warming up data caches…</div>
+      <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+      <div class="loading-note">First load takes a moment while we pull the latest
+        stats. Hang tight — the site opens as soon as it's ready.</div>
+    </div>
+  </div>
 
   <main class="site-main" role="main">
     <div class="wrap">

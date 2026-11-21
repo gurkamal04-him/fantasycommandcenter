@@ -57,6 +57,24 @@ _RANKINGS_ERROR: Dict[str, str] = {}
 # Common periods to keep warm so switching the dropdown is instant.
 _RK_COMMON_PERIODS = ('season', '2weeks', '1week')
 
+# Readiness flag: set to True once the initial warm-up finishes. The
+# frontend polls /api/ready and only removes the "Please Wait" overlay once
+# this returns true, so the user never has to guess how long startup takes.
+_READY = False
+_READY_LOCK = threading.Lock()
+
+
+def set_ready() -> None:
+    """Mark the app as warmed up and ready to serve traffic."""
+    global _READY
+    with _READY_LOCK:
+        _READY = True
+
+
+def is_ready() -> bool:
+    with _READY_LOCK:
+        return _READY
+
 
 def _rk_key(period: str, season: str, start_date: str, end_date: str) -> str:
     return f"{period}|{season}|{start_date}|{end_date}"
@@ -86,11 +104,13 @@ def warm_rankings(period: str = 'season', season: str = '2026-27',
             with _RANKINGS_LOCK:
                 _RANKINGS_CACHE[k] = result
                 _RANKINGS_WARMING.discard(k)
+        set_ready()
     except Exception as e:
         with _RANKINGS_LOCK:
             for k in keys:
                 _RANKINGS_WARMING.discard(k)
                 _RANKINGS_ERROR[k] = str(e)
+        set_ready()
 
 # =====================================================================
 # NBA API Helpers
@@ -1716,6 +1736,17 @@ def period_label(period: str, start_date: str, end_date: str) -> str:
             'season': 'Whole Season'}.get(period, period)
 
 
+@app.route('/api/ready')
+def app_ready():
+    """Readiness probe for the frontend "Please Wait" overlay.
+
+    Returns {"ready": true} once the initial warm-up is complete, and
+    {"ready": false} while it's still running. The frontend polls this on
+    startup and only removes the overlay when it sees true.
+    """
+    return jsonify({'ready': is_ready()})
+
+
 @app.route('/api/player-rankings')
 def player_rankings():
     """Get player rankings by total fantasy points"""
@@ -2336,7 +2367,7 @@ def player_period_fps(player_id):
             # Fallback: if rankings pipeline returned no data for this player,
             # compute period FPS directly from the player's gamelog
             if player_games == 0:
-                gl_df = get_player_gamelog(player_id)
+                gl_df = get_player_gamelog_parallel(player_id)
                 if not gl_df.empty:
                     today = datetime.now().date()
                     days_map = {'7d': 7, '14d': 14, '30d': 30}
@@ -2391,7 +2422,7 @@ def player_date_range_stats(player_id):
         if not player:
             return jsonify({'error': 'Player not found'}), 404
 
-        df = get_player_gamelog(player_id, n_games=82)
+        df = get_player_gamelog_parallel(player_id, n_games=30)
         if df.empty:
             return jsonify({'player_id': player_id, 'name': player.get('DISPLAY_FIRST_LAST', ''),
                             'games': [], 'averages': {}})
@@ -3447,8 +3478,12 @@ def season_outlook():
 # =====================================================================
 # Main
 # =====================================================================
+# Kick off the initial warm-up as soon as the module is imported, so it runs
+# under gunicorn too (gunicorn never executes the __main__ block below).
+# The frontend polls /api/ready until set_ready() has fired.
+threading.Thread(target=warm_rankings, args=('season', '2026-27'), daemon=True).start()
+
+
 if __name__ == '__main__':
-    # Pre-warm rankings cache in the background so the first request is fast
-    threading.Thread(target=warm_rankings, args=('season', '2026-27'), daemon=True).start()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)

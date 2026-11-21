@@ -26,6 +26,53 @@
   function hide(el) { el.hidden = true; }
   function setText(el, text) { if (el) el.textContent = text; }
 
+  // ===================================================================
+  // Readiness probe — waits for the server's warm-up to finish before
+  // revealing the page. The overlay in base.html blocks the view until
+  // /api/ready returns {"ready": true}.
+  // ===================================================================
+  const loadingOverlay = $('#loading-overlay');
+  let readyPollTimer = null;
+
+  async function checkReady() {
+    try {
+      const r = await fetch('/api/ready', { cache: 'no-store' });
+      if (!r.ok) return false;
+      const data = await r.json();
+      return !!data.ready;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function dismissLoading() {
+    if (!loadingOverlay) return;
+    loadingOverlay.style.transition = 'opacity 0.4s ease';
+    loadingOverlay.style.opacity = '0';
+    loadingOverlay.addEventListener('transitionend', () => {
+      loadingOverlay.remove();
+    }, { once: true });
+    // Safety net: remove it outright after the transition even if it never fires.
+    setTimeout(() => { if (loadingOverlay.parentNode) loadingOverlay.remove(); }, 800);
+  }
+
+  async function pollReady() {
+    if (!loadingOverlay) return;
+    const ready = await checkReady();
+    if (ready) {
+      dismissLoading();
+      return;
+    }
+    readyPollTimer = setTimeout(pollReady, 1500);
+  }
+
+  // Kick off the readiness poll as soon as the script runs. If the server
+  // is already warm (e.g. after a warm-up thread started at import time),
+  // the overlay disappears immediately.
+  if (loadingOverlay) {
+    pollReady();
+  }
+
   // The rankings endpoint warms its cache in a background thread, so the
   // first response can come back with warming:true. Poll until it's ready.
   async function fetchRankingsWithPoll(url, { signal, maxAttempts = 60 } = {}) {
