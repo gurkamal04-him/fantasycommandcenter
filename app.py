@@ -6,6 +6,7 @@ Free-to-use fantasy basketball suite using ESPN public API
 import os
 import json
 import math
+import random
 import time
 import threading
 import unicodedata
@@ -116,9 +117,23 @@ def warm_rankings(period: str = 'season', season: str = '2026-27',
 # NBA API Helpers
 # =====================================================================
 
+# More realistic browser headers to avoid ESPN 403 blocking
+# ESPN aggressively rate-limits requests that look like automated scrapers
 ESPN_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-CH-UA': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
 }
 
 # Fallback static list of all 30 NBA teams (ESPN team IDs + abbreviations)
@@ -1053,7 +1068,7 @@ def _parse_espn_player_row(row: dict, team_abbr: str) -> dict:
 @lru_cache(maxsize=32)
 def get_espn_box_score(game_id: str) -> Dict[str, Any]:
     """
-    Get a full box score from the ESPN public API.
+    Get a full box score from the ESPN public API with retry on 403/429.
 
     ESPN's /summary endpoint returns per-player stats inside
     boxscore.players[].statistics[0].athletes[] as flat string arrays
@@ -1062,98 +1077,146 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
 
     Returns a dict with 'players' (list of per-player stat dicts),
     'home_team', 'away_team', and 'source'.
+
+    Note: This function is lru_cached. On transient 403/429 errors, we raise
+    an exception rather than returning an empty result, so the cache doesn't
+    poison the entry and the retry wrapper can re-attempt.
     """
-    try:
-        import requests
-        espn_id = str(game_id)
-        # If we received an NBA.com ID, convert it
-        if len(espn_id) == 10 and espn_id.isdigit():
-            espn_id = nba_to_espn_id(espn_id)
+    espn_id = str(game_id)
+    # If we received an NBA.com ID, convert it
+    if len(espn_id) == 10 and espn_id.isdigit():
+        espn_id = nba_to_espn_id(espn_id)
 
-        url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={espn_id}"
-        resp = requests.get(url, headers=ESPN_HEADERS, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+    url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={espn_id}"
 
-        boxscore = data.get('boxscore', {})
-        teams = boxscore.get('teams', [])
+    for attempt in range(3):
+        try:
+            import requests
+            resp = requests.get(url, headers=ESPN_HEADERS, timeout=10)
 
-        home_team = None
-        away_team = None
-        for t in teams:
-            team = t.get('team', {})
-            if team.get('homeAway') == 'home' or (home_team is None and team.get('id')):
-                home_team = team
-            if team.get('homeAway') == 'away':
-                away_team = team
+            # Raise on 403/429 so we can retry (don't cache the failure)
+            if resp.status_code in (403, 429):
+                raise RuntimeError(f"ESPN box score HTTP {resp.status_code}")
 
-        # Team-level stats (for usage calc)
-        # Team statistics use {name, displayValue} pairs, not {keys, displayValues}.
-        team_stats = {}
-        for t in teams:
-            team = t.get('team', {})
-            abbr = team.get('abbreviation')
-            tm = {}
-            for s in t.get('statistics', []):
-                name = s.get('name')
-                val = s.get('displayValue')
-                if name and val is not None:
-                    tm[name] = val
-            team_stats[abbr] = tm
+            resp.raise_for_status()
+            data = resp.json()
 
-        # Team points are NOT in the boxscore.statistics payload; they live in
-        # the header.competitions[].competitors[].score. Add them so callers
-        # (pace/defensive-rating estimation) can read tm['points'].
-        header = data.get('header', {})
-        for comp in header.get('competitions', []):
-            for c in comp.get('competitors', []):
-                abbr = (c.get('team') or {}).get('abbreviation')
-                score = c.get('score')
-                if abbr and score is not None and abbr in team_stats:
-                    team_stats[abbr]['points'] = str(score)
+            boxscore = data.get('boxscore', {})
+            teams = boxscore.get('teams', [])
 
-        # Get game date/time from header
-        game_date = None
-        for comp in header.get('competitions', []):
-            game_date = comp.get('date')
-            if game_date:
-                break
+            home_team = None
+            away_team = None
+            for t in teams:
+                team = t.get('team', {})
+                if team.get('homeAway') == 'home' or (home_team is None and team.get('id')):
+                    home_team = team
+                if team.get('homeAway') == 'away':
+                    away_team = team
 
-        players = []
-        for team_block in boxscore.get('players', []):
-            team = team_block.get('team', {})
-            abbr = team.get('abbreviation', '')
-            for stat_group in team_block.get('statistics', []):
-                keys = stat_group.get('keys', [])
-                for athlete_row in stat_group.get('athletes', []):
-                    stats = athlete_row.get('stats') or []
-                    if not stats:
-                        continue  # DNP
-                    row = dict(zip(keys, stats))
-                    parsed = _parse_espn_player_row(row, abbr)
-                    # Attach athlete metadata (name, id, position, jersey)
-                    athlete = athlete_row.get('athlete', {}) or {}
-                    parsed['playerName'] = athlete.get('displayName') or athlete.get('shortName') or ''
-                    parsed['playerId'] = athlete.get('id')
-                    parsed['position'] = athlete.get('position', {}).get('abbreviation', '') or athlete.get('position', {}).get('name', '')
-                    parsed['jersey'] = athlete.get('jersey', '')
-                    parsed['starter'] = bool(athlete_row.get('starter', False))
-                    parsed['didNotPlay'] = bool(athlete_row.get('didNotPlay', False))
-                    parsed['reason'] = athlete_row.get('reason', '')
-                    players.append(parsed)
-                break  # only first stat group per team
+            # Team-level stats (for usage calc)
+            # Team statistics use {name, displayValue} pairs, not {keys, displayValues}.
+            team_stats = {}
+            for t in teams:
+                team = t.get('team', {})
+                abbr = team.get('abbreviation')
+                tm = {}
+                for s in t.get('statistics', []):
+                    name = s.get('name')
+                    val = s.get('displayValue')
+                    if name and val is not None:
+                        tm[name] = val
+                team_stats[abbr] = tm
 
-        return {
-            'players': players,
-            'home_team': home_team,
-            'away_team': away_team,
-            'team_stats': team_stats,
-            'game_date': game_date,
-            'source': 'espn',
-        }
-    except Exception as e:
-        print(f"Error fetching ESPN box score for game_id={game_id}: {e}")
-        return {'players': [], 'source': 'espn', 'error': str(e)}
+            # Team points are NOT in the boxscore.statistics payload; they live in
+            # the header.competitions[].competitors[].score. Add them so callers
+            # (pace/defensive-rating estimation) can read tm['points'].
+            header = data.get('header', {})
+            for comp in header.get('competitions', []):
+                for c in comp.get('competitors', []):
+                    abbr = (c.get('team') or {}).get('abbreviation')
+                    score = c.get('score')
+                    if abbr and score is not None and abbr in team_stats:
+                        team_stats[abbr]['points'] = str(score)
+
+            # Get game date/time from header
+            game_date = None
+            for comp in header.get('competitions', []):
+                game_date = comp.get('date')
+                if game_date:
+                    break
+
+            players = []
+            for team_block in boxscore.get('players', []):
+                team = team_block.get('team', {})
+                abbr = team.get('abbreviation', '')
+                for stat_group in team_block.get('statistics', []):
+                    keys = stat_group.get('keys', [])
+                    for athlete_row in stat_group.get('athletes', []):
+                        stats = athlete_row.get('stats') or []
+                        if not stats:
+                            continue  # DNP
+                        row = dict(zip(keys, stats))
+                        parsed = _parse_espn_player_row(row, abbr)
+                        # Attach athlete metadata (name, id, position, jersey)
+                        athlete = athlete_row.get('athlete', {}) or {}
+                        parsed['playerName'] = athlete.get('displayName') or athlete.get('shortName') or ''
+                        parsed['playerId'] = athlete.get('id')
+                        parsed['position'] = athlete.get('position', {}).get('abbreviation', '') or athlete.get('position', {}).get('name', '')
+                        parsed['jersey'] = athlete.get('jersey', '')
+                        parsed['starter'] = bool(athlete_row.get('starter', False))
+                        parsed['didNotPlay'] = bool(athlete_row.get('didNotPlay', False))
+                        parsed['reason'] = athlete_row.get('reason', '')
+                        players.append(parsed)
+                    break  # only first stat group per team
+
+            return {
+                'players': players,
+                'home_team': home_team,
+                'away_team': away_team,
+                'team_stats': team_stats,
+                'game_date': game_date,
+                'source': 'espn',
+            }
+        except RuntimeError:
+            # Re-raise rate limit errors for retry logic
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            raise
+        except Exception as e:
+            print(f"Error fetching ESPN box score for game_id={game_id}: {e}")
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            return {'players': [], 'source': 'espn', 'error': str(e)}
+
+
+def get_box_score_cached(game_id: str) -> Dict[str, Any]:
+    """Wrapper around get_espn_box_score that uses the shared _BOX_SCORE_CACHE.
+
+    This function handles the cache lock and size limits, and adds a small
+    random delay between fetches to avoid hammering ESPN with concurrent requests.
+    """
+    with _BOX_SCORE_CACHE_LOCK:
+        if game_id in _BOX_SCORE_CACHE:
+            return _BOX_SCORE_CACHE[game_id]
+
+        # Check cache size limit
+        if len(_BOX_SCORE_CACHE) >= _BOX_SCORE_CACHE_MAX:
+            # Remove oldest entry (first item)
+            oldest_key = next(iter(_BOX_SCORE_CACHE))
+            del _BOX_SCORE_CACHE[oldest_key]
+
+    # Fetch outside the lock to avoid blocking other cache lookups
+    result = get_espn_box_score(game_id)
+
+    # Only cache successful results (not empty/error results from 403)
+    if result.get('players'):
+        with _BOX_SCORE_CACHE_LOCK:
+            if len(_BOX_SCORE_CACHE) < _BOX_SCORE_CACHE_MAX:
+                _BOX_SCORE_CACHE[game_id] = result
+
+    return result
 
 
 def _get_espn_team_schedule_retry(team_id: int, season: str = '2026-27') -> pd.DataFrame:
@@ -1636,7 +1699,8 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             return out
 
         # Use thread pool for I/O-bound HTTP fetches (ESPN API is the bottleneck)
-        with ThreadPoolExecutor(max_workers=24) as executor:
+        # Keep concurrency modest (6 workers) with jitter to avoid triggering ESPN 403 rate limits
+        with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {executor.submit(fetch_one, item): item for item in game_dates.items()}
             for fut in as_completed(futures):
                 try:
@@ -2664,69 +2728,93 @@ def _build_scoreboard_from_schedules(date_str: str) -> Dict:
 
 @app.route('/api/scoreboard')
 def scoreboard():
-    """Get today's games - uses ESPN public API (stats.nba.com blocks cloud IPs)"""
+    """Get today's games - uses ESPN public API with retry on 403/429.
+
+    Falls back to building scoreboard from team schedules if the direct
+    scoreboard endpoint is blocked.
+    """
     date_str = request.args.get('date', get_effective_date_pct())
     # ESPN expects YYYYMMDD format (no dashes)
     espn_date = date_str.replace('-', '')
 
     # stats.nba.com consistently times out on Render/cloud infrastructure.
     # Use ESPN public API as primary source - it's fast, reliable, and no auth needed.
-    try:
-        import requests
-        espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
-        resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        # Transform ESPN structure to our expected format
-        games = []
-        for event in data.get('events', []):
-            competition = event['competitions'][0]
-            home = competition['competitors'][0]
-            away = competition['competitors'][1]
-            games.append({
-                'gameId': event.get('id'),
-                'nbaGameId': espn_to_nba_id(event.get('id', '')),
-                'home': {
-                    'teamId': home.get('id'),
-                    'teamTricode': home['team']['abbreviation'],
-                    'teamCity': home['team'].get('location', ''),
-                    'teamName': home['team'].get('name', ''),
-                    'score': int(home.get('score', 0)),
-                    'wins': int(home.get('wins', 0)),
-                    'losses': int(home.get('losses', 0)),
-                },
-                'away': {
-                    'teamId': away.get('id'),
-                    'teamTricode': away['team']['abbreviation'],
-                    'teamCity': away['team'].get('location', ''),
-                    'teamName': away['team'].get('name', ''),
-                    'score': int(away.get('score', 0)),
-                    'wins': int(away.get('wins', 0)),
-                    'losses': int(away.get('losses', 0)),
-                },
-                'gameStatus': event['status']['type']['description'],
-                'gameStatusText': event['status']['type'].get('detail', ''),
-                'gameEt': event['date'],
-                'period': event['status'].get('period', 0),
-                'gameCode': event.get('shortName', ''),
-            })
-        return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
-    except Exception as e:
-        print(f"Error fetching scoreboard from ESPN: {e}, trying schedule fallback...")
-        # Fallback: build scoreboard from team schedules
-        try:
-            fallback_data = _build_scoreboard_from_schedules(date_str)
-            if fallback_data['games']:
-                return jsonify(fallback_data)
-        except Exception as fe:
-            print(f"Schedule fallback also failed: {fe}")
+    espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
 
-        return jsonify({
-            'error': 'Failed to fetch scoreboard from ESPN',
-            'espn_error': str(e),
-            'date': date_str,
-            'games': []
-        })
+    # Try ESPN scoreboard with retries
+    for attempt in range(3):
+        try:
+            import requests
+            resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
+
+            # Raise on 403/429 so we can retry
+            if resp.status_code in (403, 429):
+                raise RuntimeError(f"ESPN scoreboard HTTP {resp.status_code}")
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            # Transform ESPN structure to our expected format
+            games = []
+            for event in data.get('events', []):
+                competition = event['competitions'][0]
+                home = competition['competitors'][0]
+                away = competition['competitors'][1]
+                games.append({
+                    'gameId': event.get('id'),
+                    'nbaGameId': espn_to_nba_id(event.get('id', '')),
+                    'home': {
+                        'teamId': home.get('id'),
+                        'teamTricode': home['team']['abbreviation'],
+                        'teamCity': home['team'].get('location', ''),
+                        'teamName': home['team'].get('name', ''),
+                        'score': int(home.get('score', 0)),
+                        'wins': int(home.get('wins', 0)),
+                        'losses': int(home.get('losses', 0)),
+                    },
+                    'away': {
+                        'teamId': away.get('id'),
+                        'teamTricode': away['team']['abbreviation'],
+                        'teamCity': away['team'].get('location', ''),
+                        'teamName': away['team'].get('name', ''),
+                        'score': int(away.get('score', 0)),
+                        'wins': int(away.get('wins', 0)),
+                        'losses': int(away.get('losses', 0)),
+                    },
+                    'gameStatus': event['status']['type']['description'],
+                    'gameStatusText': event['status']['type'].get('detail', ''),
+                    'gameEt': event['date'],
+                    'period': event['status'].get('period', 0),
+                    'gameCode': event.get('shortName', ''),
+                })
+            return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
+        except RuntimeError as e:
+            # Rate limit - retry with backoff
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            print(f"Error fetching scoreboard from ESPN after retries: {e}")
+        except Exception as e:
+            print(f"Error fetching scoreboard from ESPN: {e}")
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+
+    # Fallback: build scoreboard from team schedules
+    print("ESPN scoreboard failed after retries, trying schedule fallback...")
+    try:
+        fallback_data = _build_scoreboard_from_schedules(date_str)
+        if fallback_data['games']:
+            return jsonify(fallback_data)
+    except Exception as fe:
+        print(f"Schedule fallback also failed: {fe}")
+
+    return jsonify({
+        'error': 'Failed to fetch scoreboard from ESPN',
+        'espn_error': 'Rate limited or unavailable after retries',
+        'date': date_str,
+        'games': []
+    })
 
 
 @app.route('/api/start-sit', methods=['POST'])
