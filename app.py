@@ -23,6 +23,39 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
 
+
+# --- Shared-password gate (HTTP Basic Auth) ---
+import secrets
+from flask import Response
+
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+_FAILED = {}                    # visitor IP -> times of recent wrong passwords
+_MAX_FAILS, _WINDOW = 10, 600   # lock out after 10 wrong tries in 10 minutes
+
+
+@app.before_request
+def require_password():
+    ip = request.headers.get("CF-Connecting-IP", request.remote_addr)
+    now = time.time()
+    recent = [t for t in _FAILED.get(ip, []) if now - t < _WINDOW]
+    if len(recent) >= _MAX_FAILS:
+        return Response("Too many attempts. Try again later.", 429)
+
+    auth = request.authorization
+    supplied = (auth.password or "") if auth else ""
+    if APP_PASSWORD and secrets.compare_digest(supplied.encode(), APP_PASSWORD.encode()):
+        _FAILED.pop(ip, None)
+        return None  # correct password: let the request through
+
+    if auth:
+        recent.append(now)  # count wrong passwords only, not the first prompt
+    if recent:
+        _FAILED[ip] = recent
+    else:
+        _FAILED.pop(ip, None)
+    return Response("Password required", 401,
+                    {"WWW-Authenticate": 'Basic realm="Fantasy Command Center"'})
+
 # =====================================================================
 # Scoring Configuration (Points League Custom)
 # =====================================================================
@@ -167,23 +200,23 @@ def warm_rankings(period: str = 'season', season: str = '2026-27',
 # NBA API Helpers
 # =====================================================================
 
-# More realistic browser headers to avoid ESPN 403 blocking
-# ESPN aggressively rate-limits requests that look like automated scrapers
+# Headers for ESPN's public JSON API (site.api.espn.com).
+# These endpoints return application/json, so the headers must look like an
+# XHR/fetch request from espn.com rather than a top-level page navigation.
+# Sending "Accept: text/html" + "Sec-Fetch-Dest: document" makes ESPN respond
+# 403 Forbidden, since its API is not meant to serve HTML documents.
 ESPN_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
+    'Referer': 'https://www.espn.com/nba/',
+    'Origin': 'https://www.espn.com',
     'Sec-CH-UA': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
     'Sec-CH-UA-Mobile': '?0',
     'Sec-CH-UA-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-site',
 }
 
 # Fallback static list of all 30 NBA teams (ESPN team IDs + abbreviations)
