@@ -263,3 +263,257 @@ No schedule data for season 2026-27 — using mock game log
 127.0.0.1 - - [20/Nov/2026 16:07:18] "GET /player/3033 HTTP/1.1" 200 -
 127.0.0.1 - - [20/Nov/2026 16:08:27] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
 127.0.0.1 - - [20/Nov/2026 16:08:47] "GET /api/player/3033/period-fps?period=7 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:40] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:41] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:09:41] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:09:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:41] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:46] "GET /player/4701230 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:46] "GET /api/player/4701230/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:46] "GET /api/player/4701230/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:09:46] "GET /api/player/4701230/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:55] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:55] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:56] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:57] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:58] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:13:58] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:14:00] "GET /api/boxscore/401910019 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:14:38] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:14:39] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:14:39] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:14:41] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /player/4869342 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /api/player/4869342/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:15:21] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:16:16] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:16:29] "GET /api/player/27/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 404 -
+127.0.0.1 - - [20/Nov/2026 16:16:58] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:17:41] "GET /api/player/1966/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:18:06] "GET /api/player/3945274/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:18:31] "GET /api/player/6430/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:03] "GET /api/player/3468/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:30] "GET /api/player/3978/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:34] "GET /api/player/3978/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:52] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:52] "GET /api/player/1966/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:52] "GET /api/player/3945274/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:53] "GET /api/player/6430/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:53] "GET /api/player/3468/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:19:54] "GET /api/player/3978/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:20:00] "GET /api/player/6589/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:20:10] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:28] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:28] "GET /api/player/1966/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:29] "GET /api/player/3945274/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:29] "GET /api/player/6430/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:29] "GET /api/player/3468/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:30] "GET /api/player/3978/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:53] "GET /api/player/3033/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:54] "GET /api/player/1966/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:54] "GET /api/player/3945274/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:54] "GET /api/player/6430/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:55] "GET /api/player/3468/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:21:55] "GET /api/player/3978/date-range-stats?start=2026-10-01&end=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:54] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:54] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:26:54] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:26:54] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:54] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:58] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:58] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:58] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:26:58] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:27:30] "GET /player/4711294 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:27:30] "GET /api/player/4711294/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:27:30] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:27:30] "GET /api/player/4711294/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:06] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:10] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:36] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:39] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:41] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:42] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:43] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:28:51] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\gurka\\Desktop\\NBA FANTASY\\NBAFANTASY\\fantasycommandcenter\\app.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 431-750-286
+ * Detected change in 'C:\\Users\\gurka\\Desktop\\NBA FANTASY\\NBAFANTASY\\fantasycommandcenter\\app.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 431-750-286
+ * Detected change in 'C:\\Users\\gurka\\Desktop\\NBA FANTASY\\NBAFANTASY\\fantasycommandcenter\\app.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 431-750-286
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:17] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:18] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:18] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:18] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:30:18] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:32:51] "GET /api/boxscore/0022500226 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:33:31] "GET /api/player/3033/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:33:42] "GET /api/boxscore/0022500226 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /player/4711294 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /api/player/4711294/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /api/player/4711294/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:03] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:15] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:22] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:24] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:25] "GET /api/player/4711294/date-range-stats?start_date=2025-11-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:28] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:29] "GET /api/player/4711294/date-range-stats?start_date=2026-11-06&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:34:32] "GET /api/player/4711294/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:35:34] "GET /api/player/4711294/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:36:41] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:36:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:36:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:36:41] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:17] "GET /player/5175643 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:17] "GET /api/player/5175643/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:40] "GET /api/player/5175643/date-range-stats?start_date=2026-11-13&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:42] "GET /api/player/5175643/date-range-stats?start_date=2026-10-20&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:44] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:44] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:44] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:44] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:37:47] "GET /api/player/5175643/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:38:00] "GET /api/player/5175643/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:38:17] "GET /player/4278562 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:38:18] "GET /api/player/4278562/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:38:18] "GET /api/player/4278562/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:38:18] "GET /api/player/4278562/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:12] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:12] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:39:12] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:39:12] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:12] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:25] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:26] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:26] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:28] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:28] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:28] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:39:29] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:40:04] "GET /player/4278039 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:40:04] "GET /api/player/4278039/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:40:04] "GET /api/player/4278039/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:40:04] "GET /api/player/4278039/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:42:41] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:42:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:42:41] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:42:42] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:43:16] "GET /player/4869342 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:43:16] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:43:16] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:43:16] "GET /api/player/4869342/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:44:56] "GET /api/player/3033/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /player/4869342 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /static/styles.css HTTP/1.1" 304 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /api/player/4869342/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:32] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:37] "GET /player/4869342 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:37] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:37] "GET /api/player/4869342/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:37] "GET /api/player/4869342/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:45] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:45] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:52:45] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:54:10] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:54:11] "GET /player/4278039 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:54:11] "GET /api/player/4278039/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:54:11] "GET /api/player/4278039/date-range-stats?start_date=2026-10-21&end_date=2026-11-20 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:54:11] "GET /api/player/4278039/period-fps HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:57:29] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:57:29] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:57:30] "GET /api/scoreboard?date=2026-11-19 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:57:30] "GET /api/players/search?limit=500 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Nov/2026 16:57:33] "GET /api/boxscore/401910019 HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\gurka\\Desktop\\NBA FANTASY\\NBAFANTASY\\fantasycommandcenter\\app.py', reloading
+ * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+ * Debugger is active!
+ * Debugger PIN: 431-750-286
+ * Detected change in 'C:\\Users\\gurka\\Desktop\\NBA FANTASY\\NBAFANTASY\\fantasycommandcenter\\app.py', reloading
+ * Restarting with stat
+ * Tip: There are .env files present. Install python-dotenv to use them.
+Error fetching ESPN team schedule for team_id=7: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=8: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=11: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=12: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=13: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=29: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=14: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=15: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=16: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=3: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=18: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=25: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=19: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=20: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=21: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=22: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=23: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=24: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=28: ESPN schedule HTTP 403
+Error fetching ESPN team schedule for team_id=26: ESPN schedule HTTP 403
+Error fetching ESPN box score for game_id=401909843: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909843
+Error fetching ESPN box score for game_id=401909834: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909834
+Error fetching ESPN box score for game_id=401909856: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909856
+Error fetching ESPN box score for game_id=401909893: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909893
+Error fetching ESPN box score for game_id=401909881: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909881
+Error fetching ESPN box score for game_id=401909874: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909874
+Error fetching ESPN box score for game_id=401909952: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909952
+Error fetching ESPN box score for game_id=401909939: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909939
+Error fetching ESPN box score for game_id=401909992: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909992
+Error fetching ESPN box score for game_id=401909095: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909095
+Error fetching ESPN box score for game_id=401909923: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909923
+Error fetching ESPN box score for game_id=401909898: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909898
+Error fetching ESPN box score for game_id=401910014: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401910014
+Error fetching ESPN box score for game_id=401909909: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909909
+Error fetching ESPN box score for game_id=401909299: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909299
+Error fetching ESPN box score for game_id=401909287: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909287
+Error fetching ESPN box score for game_id=401909877: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909877
+Error fetching ESPN box score for game_id=401909870: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909870
+Error fetching ESPN box score for game_id=401909088: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909088
+Error fetching ESPN box score for game_id=401909949: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909949
+Error fetching ESPN box score for game_id=401909278: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909278
+Error fetching ESPN box score for game_id=401909961: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909961
+Error fetching ESPN box score for game_id=401909924: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909924
+Error fetching ESPN box score for game_id=401909903: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909903
+Error fetching ESPN box score for game_id=401909288: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909288
+Error fetching ESPN box score for game_id=401909968: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909968
+Error fetching ESPN box score for game_id=401909916: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909916
+Error fetching ESPN box score for game_id=401909989: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909989
+Error fetching ESPN box score for game_id=401909994: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909994
+Error fetching ESPN box score for game_id=401909836: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909836
+Error fetching ESPN box score for game_id=401909983: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909983
+Error fetching ESPN box score for game_id=401909997: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909997
+Error fetching ESPN box score for game_id=401909910: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909910
+Error fetching ESPN box score for game_id=401910015: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401910015
+Error fetching ESPN box score for game_id=401909904: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909904
+Error fetching ESPN box score for game_id=401909925: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909925
+Error fetching ESPN box score for game_id=401909279: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909279
+Error fetching ESPN box score for game_id=401909948: 403 Client Error: Forbidden for url: https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401909948

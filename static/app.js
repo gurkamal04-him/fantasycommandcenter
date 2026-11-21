@@ -953,7 +953,7 @@
 
       return `
       <tr>
-        <td class="player-name">${p.name}</td>
+        <td class="player-name">${p.player_id ? `<a href="/player/${p.player_id}" class="player-link">${p.name}</a>` : p.name}</td>
         <td class="team-abbr">${p.team}</td>
         <td class="num">${p.min}</td>
         <td class="num">${p.pts}</td>

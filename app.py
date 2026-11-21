@@ -476,6 +476,127 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
         return _mock_player_gamelog(player_id, n_games)
 
 
+# =====================================================================
+# Parallel gamelog fetcher for Render-friendly performance
+# =====================================================================
+def get_player_gamelog_parallel(player_id: int, season: str = '2026-27', n_games: int = 30) -> pd.DataFrame:
+    """Get player game log using PARALLEL box-score fetches.
+
+    This replaces the serial loop in get_player_gamelog with a ThreadPoolExecutor
+    that caps concurrency (max_workers=8) so a single request doesn't exhaust
+    Render's 512MB free-tier memory. It also caps n_games at 30.
+    """
+    try:
+        player_id_str = str(player_id)
+
+        # Get the full league schedule for the season (all teams, all games)
+        schedule_df = get_espn_all_teams_schedule(season)
+        if schedule_df.empty:
+            print(f"No schedule data for season {season} — using mock game log")
+            return _mock_player_gamelog(player_id, n_games)
+
+        # Filter to completed games only
+        completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
+        if completed.empty:
+            print(f"No completed games for season {season} — using mock game log")
+            return _mock_player_gamelog(player_id, n_games)
+
+        # Collect candidate game IDs (deduplicated)
+        seen_game_ids = set()
+        candidate_games = []
+        for _, row in completed.iterrows():
+            if len(candidate_games) >= n_games:
+                break
+            gid = str(row.get('gameId') or '')
+            if not gid or gid in seen_game_ids:
+                continue
+            seen_game_ids.add(gid)
+            # Store row data needed later for matchup/date
+            candidate_games.append({
+                'gameId': gid,
+                'gameDate': row.get('GAME_DATE', ''),
+                'home_abbr': row.get('homeTeam_teamTricode', ''),
+                'away_abbr': row.get('awayTeam_teamTricode', ''),
+            })
+
+        if not candidate_games:
+            print(f"No completed games for season {season} — using mock game log")
+            return _mock_player_gamelog(player_id, n_games)
+
+        # Parallel fetch box scores for candidate games
+        def fetch_and_match(cg):
+            gid = cg['gameId']
+            box = get_espn_box_score(gid)
+            for p in box.get('players', []):
+                if _match_player_in_box(p, player_id):
+                    # Found the player in this game — enrich with matchup/date
+                    p['gameId'] = gid
+                    # Game date
+                    game_date = cg['gameDate']
+                    if hasattr(game_date, 'isoformat'):
+                        p['gameDate'] = game_date.isoformat()
+                    else:
+                        p['gameDate'] = str(game_date)[:10]
+                    # Matchup string
+                    home_abbr = cg['home_abbr']
+                    away_abbr = cg['away_abbr']
+                    p_team = p.get('teamAbbrev', '')
+                    if home_abbr and away_abbr:
+                        is_home = p_team == home_abbr
+                        opp = away_abbr if is_home else home_abbr
+                        p['matchup'] = f"{p_team} {'vs' if is_home else '@'} {opp}"
+                        p['opp_abbr'] = opp
+                        p['is_home'] = is_home
+                    return p
+            return None
+
+        # Cap concurrency at 8 to stay within Render free-tier memory
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(fetch_and_match, candidate_games))
+
+        games = [r for r in results if r is not None]
+
+        if not games:
+            print(f"No games found for player {player_id} — using mock game log")
+            return _mock_player_gamelog(player_id, n_games)
+
+        # Convert to DataFrame with expected columns
+        rows = []
+        for g in games:
+            row = {
+                'PERSON_ID': player_id,
+                'TEAM_ABBREVIATION': g.get('teamAbbrev', ''),
+                'GAME_ID': g.get('gameId', ''),
+                'GAME_DATE': g.get('gameDate', ''),
+                'MATCHUP': g.get('matchup', ''),
+                'IS_HOME': g.get('is_home', True),
+                'START_POSITION': g.get('position', '') or '',
+                'STARTER': g.get('starter', False),
+                'DID_NOT_PLAY': g.get('didNotPlay', False),
+                'WL': 'W' if g.get('plusMinus', 0) > 0 else 'L',
+                'MIN': g.get('minutes', 0),
+                'PTS': g.get('points', 0),
+                'REB': g.get('rebounds', 0),
+                'AST': g.get('assists', 0),
+                'STL': g.get('steals', 0),
+                'BLK': g.get('blocks', 0),
+                'TOV': g.get('turnovers', 0),
+                'FGM': g.get('fieldGoalsMade', 0),
+                'FGA': g.get('fieldGoalsAttempted', 0),
+                'FG3M': g.get('threePointFieldGoalsMade', 0),
+                'FG3A': g.get('threePointFieldGoalsAttempted', 0),
+                'FTM': g.get('freeThrowsMade', 0),
+                'FTA': g.get('freeThrowsAttempted', 0),
+            }
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+        return df
+    except Exception as e:
+        print(f"Error fetching player gamelog (parallel) from ESPN: {e}")
+        return _mock_player_gamelog(player_id, n_games)
+
+
 def _mock_player_gamelog(player_id: int, n_games: int) -> pd.DataFrame:
     """Generate a mock game log when ESPN data is unavailable.
 
@@ -1677,9 +1798,13 @@ def player_profile_page(player_id):
     team_info = next((t for t in get_all_teams() if t['id'] == team_id), {})
 
     # Get basic player info for the template
-    # Fetch season averages to display in cards
-    n = request.args.get('n', 82, type=int)
-    df = get_player_gamelog(player_id, n_games=n)
+    # Fetch season averages to display in cards.
+    # NOTE: n is capped at 30 — fetching 82 box scores (one ESPN request per
+    # completed game) serially blows past the 512MB/30s limits on Render's
+    # free tier and gets the gunicorn worker OOM-killed. The parallel fetcher
+    # below also caps concurrency so a single request can't exhaust memory.
+    n = min(request.args.get('n', 30, type=int), 30)
+    df = get_player_gamelog_parallel(player_id, n_games=n)
 
     games_played = 0
     total_fps = 0.0
