@@ -461,21 +461,35 @@ def get_team_id(abbrev: str) -> Optional[int]:
     return None
 
 
-@lru_cache(maxsize=128)
-def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 50) -> pd.DataFrame:
+# Use a custom cache key that includes team_id
+_gamelog_cache = {}
+_gamelog_cache_lock = threading.Lock()
+
+def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 50, team_id: int = None) -> pd.DataFrame:
     """Get player game log for current season using ESPN schedule + box scores.
 
-    ESPN doesn't have a direct player gamelog endpoint. We fetch the full league
-    schedule (all 30 teams) and then get box scores for completed games to
-    extract the player's stats. This avoids relying on potentially incorrect
+    ESPN doesn't have a direct player gamelog endpoint. We fetch the league
+    schedule (all 30 teams or team-specific) and then get box scores for completed
+    games to extract the player's stats. This avoids relying on potentially incorrect
     team assignments from ESPN rosters.
+
+    If team_id is provided, only fetch games for that team (more efficient and accurate).
     """
+    # Create cache key including team_id
+    cache_key = (player_id, season, n_games, team_id)
+    with _gamelog_cache_lock:
+        if cache_key in _gamelog_cache:
+            return _gamelog_cache[cache_key]
+
     try:
         player_id_str = str(player_id)
 
-        # Get the full league schedule for the season (all teams, all games)
-        # This is already parallelized and cached via get_espn_all_teams_schedule
-        schedule_df = get_espn_all_teams_schedule(season)
+        # Get the schedule - either team-specific or full league
+        if team_id:
+            schedule_df = get_espn_team_schedule(team_id, season)
+        else:
+            schedule_df = get_espn_all_teams_schedule(season)
+
         if schedule_df.empty:
             print(f"No schedule data for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
@@ -485,6 +499,11 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
         if completed.empty:
             print(f"No completed games for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
+
+        # Sort by date descending so we get most recent games first
+        completed = completed.copy()
+        completed['_game_date'] = pd.to_datetime(completed['GAME_DATE']).dt.date
+        completed = completed.sort_values('_game_date', ascending=False)
 
         games = []
         seen_game_ids = set()
@@ -555,6 +574,8 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
             rows.append(row)
 
         df = pd.DataFrame(rows)
+        with _gamelog_cache_lock:
+            _gamelog_cache[cache_key] = df
         return df
     except Exception as e:
         print(f"Error fetching player gamelog from ESPN: {e}")
@@ -564,18 +585,24 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
 # =====================================================================
 # Parallel gamelog fetcher for Render-friendly performance
 # =====================================================================
-def get_player_gamelog_parallel(player_id: int, season: str = '2026-27', n_games: int = 30) -> pd.DataFrame:
+def get_player_gamelog_parallel(player_id: int, season: str = '2026-27', n_games: int = 30, team_id: int = None) -> pd.DataFrame:
     """Get player game log using PARALLEL box-score fetches.
 
     This replaces the serial loop in get_player_gamelog with a ThreadPoolExecutor
     that caps concurrency (max_workers=8) so a single request doesn't exhaust
     Render's 512MB free-tier memory. It also caps n_games at 30.
+
+    If team_id is provided, only fetch games for that team (more efficient and accurate).
     """
     try:
         player_id_str = str(player_id)
 
-        # Get the full league schedule for the season (all teams, all games)
-        schedule_df = get_espn_all_teams_schedule(season)
+        # Get the schedule - either team-specific or full league
+        if team_id:
+            schedule_df = get_espn_team_schedule(team_id, season)
+        else:
+            schedule_df = get_espn_all_teams_schedule(season)
+
         if schedule_df.empty:
             print(f"No schedule data for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
@@ -586,7 +613,12 @@ def get_player_gamelog_parallel(player_id: int, season: str = '2026-27', n_games
             print(f"No completed games for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
 
-        # Collect candidate game IDs (deduplicated)
+        # Collect candidate game IDs (deduplicated) - SORT BY DATE FIRST so we get
+        # the most recent games regardless of team ordering in the schedule
+        completed = completed.copy()
+        completed['_game_date'] = pd.to_datetime(completed['GAME_DATE']).dt.date
+        completed = completed.sort_values('_game_date', ascending=False)  # Most recent first
+
         seen_game_ids = set()
         candidate_games = []
         for _, row in completed.iterrows():
@@ -2072,7 +2104,13 @@ def list_teams():
 def player_gamelog(player_id):
     """Get player game log with FPS and Usage%"""
     n = request.args.get('n', 30, type=int)
-    df = get_player_gamelog(player_id, n_games=n)
+
+    # Get player's team for team-specific schedule
+    all_players = get_all_players()
+    player = next((p for p in all_players if p.get('PERSON_ID') == player_id), None)
+    team_id = player.get('TEAM_ID') if player else None
+
+    df = get_player_gamelog(player_id, n_games=n, team_id=team_id)
     if df.empty:
         return jsonify({'error': 'No data'}), 404
 
@@ -2535,7 +2573,8 @@ def player_date_range_stats(player_id):
         if not player:
             return jsonify({'error': 'Player not found'}), 404
 
-        df = get_player_gamelog_parallel(player_id, n_games=30)
+        team_id = player.get('TEAM_ID')
+        df = get_player_gamelog_parallel(player_id, n_games=30, team_id=team_id)
         if df.empty:
             return jsonify({'player_id': player_id, 'name': player.get('DISPLAY_FIRST_LAST', ''),
                             'games': [], 'averages': {}})
