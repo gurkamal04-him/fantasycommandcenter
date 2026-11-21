@@ -62,12 +62,52 @@
       <div id="scoreboard-games" class="scoreboard-list">Loading…</div>
     </section>
 
-    <!-- Injury Tab -->
-    <section class="panel hub-card" id="injury">
-      <h2>Injury Updates</h2>
-      <a class="twitter-timeline" data-theme="dark" href="https://twitter.com/UnderdogNBA?ref_src=twsrc%5Etfw">Tweets by UnderdogNBA</a>
-      <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+    <!-- My Team -->
+    <section class="panel hub-card" id="my-team-hub">
+      <h2>My Team</h2>
+      <div class="my-team-header">
+        <button class="btn btn-primary" id="my-team-add-btn">+ Add Player</button>
+        <span class="my-team-count" id="my-team-count">0/16</span>
+      </div>
+      <div id="my-team-roster" class="my-team-roster">No players added yet. Click "Add Player" to build your roster.</div>
     </section>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- MY TEAM PAGE                                                        -->
+<!-- =================================================================== -->
+<section id="my-team" class="page" aria-labelledby="my-team-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">My Fantasy Team</div>
+    <h1 id="my-team-title">My Team</h1>
+    <p class="sub">Manage your 16-player roster and view season statistics.</p>
+  </header>
+
+  <div class="my-team-controls">
+    <button class="btn btn-primary" id="my-team-add-btn-page">+ Add Player</button>
+    <span class="my-team-count" id="my-team-count-page">0/16</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data-table" id="my-team-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          <th>Team</th>
+          <th>GP</th>
+          <th>FPS</th>
+          <th>Usage%</th>
+          <th>MIN</th>
+          <th>PTS</th>
+          <th>REB</th>
+          <th>AST</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="my-team-tbody"></tbody>
+    </table>
   </div>
 </section>
 
@@ -112,6 +152,7 @@
     <button class="btn btn-primary" id="ws-load">Load Week</button>
     <button class="btn btn-ghost" id="ws-export">Export CSV</button>
   </div>
+  <div class="controls-row" id="schedule-controls" style="margin-top: 8px;"></div>
 
   <!-- Weekly Schedule Grid (Main View) -->
   <div class="panel" id="weekly-schedule-results">
@@ -248,6 +289,7 @@
     </div>
     <button class="btn btn-primary" id="bs-load">Load Box Score</button>
   </div>
+  <div class="controls-row" id="bs-controls" style="margin-top: 8px;"></div>
 
   <!-- Today's Games (on Box Score page) -->
   <div class="panel hub-card" id="bs-todays-games" style="margin-top:16px">
@@ -343,6 +385,7 @@
     <button class="btn btn-primary" id="rk-load">Load Rankings</button>
     <button class="btn btn-ghost" id="rk-export">Export CSV</button>
   </div>
+  <div class="controls-row" id="rankings-controls" style="margin-top: 8px;"></div>
 
   <div class="panel" id="rankings-results">
     <div class="rk-meta" id="rk-meta"></div>
@@ -396,6 +439,7 @@
     </div>
     <button class="btn btn-primary" id="ss-compare">Compare</button>
   </div>
+  <div class="controls-row" id="ss-controls" style="margin-top: 8px;"></div>
 
   <div class="panel" id="startsit-results" hidden>
     <div class="ss-verdict" id="ss-verdict"></div>
@@ -438,6 +482,7 @@
     </div>
     <button class="btn btn-primary btn-lg" id="trade-analyze">Analyze Trade</button>
   </div>
+  <div class="controls-row" id="trade-controls" style="margin-top: 8px;"></div>
 
   <div class="panel" id="trade-results" hidden>
     <div class="trade-verdict" id="trade-verdict"></div>
@@ -562,6 +607,7 @@
   </section>
 
   <p class="note">Method: the final point margin is modeled as a normal distribution centered on the difference in projected finals, with variance equal to the combined player-games remaining times the squared per-game spread. Games already played are locked in through the current points. It is an estimate, so update the numbers as the week goes.</p>
+  <div class="controls-row" id="projector-controls" style="margin-top: 16px;"></div>
 </section>
 
 <!-- =================================================================== -->
@@ -582,6 +628,7 @@
     </div>
     <button class="btn btn-primary" id="ms-load">Load Projection</button>
   </div>
+  <div class="controls-row" id="minutes-controls" style="margin-top: 8px;"></div>
 
   <div class="panel" id="minutes-results" hidden>
     <div class="ms-header" id="ms-header"></div>

@@ -279,6 +279,9 @@ _FALLBACK_ESPN_ID_MAP = {
     3945274: 3945274,  # Luka Doncic
 }
 
+# Reverse map: ESPN athlete ID -> curated PERSON_ID (for players where they differ)
+_ESPN_TO_CURATED_ID_MAP = {espn: curated for curated, espn in _FALLBACK_ESPN_ID_MAP.items() if espn != curated}
+
 
 def _match_player_in_box(player: dict, fallback_id: int) -> bool:
     """True if this box-score player row corresponds to the given fallback ID.
@@ -372,24 +375,26 @@ def get_all_players() -> List[Dict]:
     espn_players = [p for roster in results for p in roster]
 
     # Merge: prefer fallback team assignments for known players, use ESPN for others
+    # Key by canonical PERSON_ID (fallback ID) to avoid duplicates where ESPN ID differs
     merged = {}
     for p in espn_players:
         pid = p['PERSON_ID']
         name = p['DISPLAY_FIRST_LAST'].lower()
         if pid in fallback_by_id:
             # Use fallback's team assignment (real-world current roster)
+            # Use fallback's PERSON_ID as the canonical key
             fb = fallback_by_id[pid]
-            merged[pid] = {
-                'PERSON_ID': pid,
+            merged[fb['PERSON_ID']] = {
+                'PERSON_ID': fb['PERSON_ID'],
                 'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
                 'TEAM_ID': fb['TEAM_ID'],
                 'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
             }
         elif name in fallback_names:
-            # Match by name as fallback
+            # Match by name as fallback - use fallback's PERSON_ID as canonical key
             fb = fallback_names[name]
-            merged[pid] = {
-                'PERSON_ID': pid,
+            merged[fb['PERSON_ID']] = {
+                'PERSON_ID': fb['PERSON_ID'],
                 'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
                 'TEAM_ID': fb['TEAM_ID'],
                 'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
@@ -1766,18 +1771,22 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             gid, gdate = gid_gdate
             box = get_box_score_cached(gid)
             out = []
+            seen_ids = set()
             for player in box.get('players', []):
                 pid = player.get('playerId')
                 if pid is None:
                     continue
+                pid = int(pid)
+                # Only add each player ID once — avoid duplicates when ESPN ID
+                # differs from our curated PERSON_ID (e.g. Trae Young 6589 vs 4277905).
+                if pid in seen_ids:
+                    continue
+                seen_ids.add(pid)
+                # Map ESPN athlete ID to our curated PERSON_ID for consistent lookups
+                curated_id = _ESPN_TO_CURATED_ID_MAP.get(pid, pid)
                 pdata = dict(player)
                 pdata['gameDate'] = gdate
-                out.append((int(pid), pdata))
-                # Also key by our curated PERSON_ID when ESPN's athlete ID
-                # differs, so fallback players (e.g. Durant) are found later.
-                for curated_id, espn_id in _FALLBACK_ESPN_ID_MAP.items():
-                    if espn_id == int(pid) and curated_id != int(pid):
-                        out.append((curated_id, pdata))
+                out.append((curated_id, pdata))
             return out
 
         # Use thread pool for I/O-bound HTTP fetches (ESPN API is the bottleneck)
@@ -2088,6 +2097,160 @@ def player_profile_page(player_id):
     }
 
     return render_template('player.html', player=player_data)
+
+
+@app.route('/api/my-team/stats', methods=['POST'])
+def my_team_stats():
+    """Get stats for a list of player IDs (My Team)"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+
+    pids = data.get('player_ids', [])
+    if not pids:
+        return jsonify([])
+
+    try:
+        pids = [int(p) for p in pids if p]
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid player IDs'}), 400
+
+    all_players = get_all_players()
+    results = []
+
+    # We'll fetch stats for each player.
+    # Use the cached serial gamelog fetcher so games aren't silently dropped
+    # when ESPN rate-limits during a parallel burst (the parallel path excludes
+    # any game whose box score comes back empty). The serial fetcher caches
+    # results in _gamelog_cache, so repeat calls are cheap.
+    for pid in pids:
+        player = next((p for p in all_players if p.get('PERSON_ID') == pid), None)
+        if not player:
+            continue
+
+        # Get gamelog to compute season stats
+        df = get_player_gamelog(pid, n_games=100)
+        if df.empty:
+            results.append({
+                'id': pid,
+                'name': player.get('DISPLAY_FIRST_LAST', 'Unknown'),
+                'team': player.get('TEAM_ABBREVIATION', ''),
+                'fps': 0, 'usage': 0, 'min': 0, 'pts': 0, 'reb': 0, 'ast': 0
+            })
+            continue
+
+        n = len(df)
+        total_fps = sum(calc_fps(row) for _, row in df.iterrows())
+        total_usage = sum(calc_usage_pct(row) for _, row in df.iterrows())
+        total_min = sum(float(row.get('MIN', 0)) for _, row in df.iterrows())
+        total_pts = sum(float(row.get('PTS', 0)) for _, row in df.iterrows())
+        total_reb = sum(float(row.get('REB', 0)) for _, row in df.iterrows())
+        total_ast = sum(float(row.get('AST', 0)) for _, row in df.iterrows())
+
+        results.append({
+            'id': pid,
+            'name': player.get('DISPLAY_FIRST_LAST', ''),
+            'team': player.get('TEAM_ABBREVIATION', ''),
+            'fps': round(total_fps / n, 1) if n else 0,
+            'usage': round(total_usage / n, 1) if n else 0,
+            'min': round(total_min / n, 1) if n else 0,
+            'pts': round(total_pts / n, 1) if n else 0,
+            'reb': round(total_reb / n, 1) if n else 0,
+            'ast': round(total_ast / n, 1) if n else 0,
+            'games': n
+        })
+
+    return jsonify(results)
+
+
+@app.route('/api/my-team/boxscore', methods=['POST'])
+def my_team_boxscore():
+    """Get boxscore for My Team players on a specific date"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+
+    pids = data.get('player_ids', [])
+    date_str = data.get('date', '')
+
+    if not pids or not date_str:
+        return jsonify({'error': 'Missing player_ids or date'}), 400
+
+    try:
+        pids = [int(p) for p in pids if p]
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid player IDs'}), 400
+
+    all_players = get_all_players()
+    results = []
+
+    for pid in pids:
+        player = next((p for p in all_players if p.get('PERSON_ID') == pid), None)
+        if not player:
+            continue
+
+        # Get gamelog and find the specific date. Use the cached serial fetcher
+        # so games aren't silently dropped on ESPN rate-limits (parallel path
+        # excludes any game whose box score comes back empty).
+        df = get_player_gamelog(pid, n_games=100)
+        if df.empty:
+            results.append({
+                'id': pid,
+                'name': player.get('DISPLAY_FIRST_LAST', ''),
+                'team': player.get('TEAM_ABBREVIATION', ''),
+                'status': 'DNP',
+                'fps': 0,
+                'min': 0,
+                'pts': 0,
+                'reb': 0,
+                'ast': 0,
+                'stl': 0,
+                'blk': 0,
+                'tov': 0
+            })
+            continue
+
+        # Find game on this date
+        game_row = df[df['GAME_DATE'] == date_str]
+
+        if game_row.empty:
+            results.append({
+                'id': pid,
+                'name': player.get('DISPLAY_FIRST_LAST', ''),
+                'team': player.get('TEAM_ABBREVIATION', ''),
+                'status': 'DNP',
+                'fps': 0,
+                'min': 0,
+                'pts': 0,
+                'reb': 0,
+                'ast': 0,
+                'stl': 0,
+                'blk': 0,
+                'tov': 0
+            })
+        else:
+            row = game_row.iloc[0]
+            fps = calc_fps(row)
+            usage = calc_usage_pct(row)
+            results.append({
+                'id': pid,
+                'name': player.get('DISPLAY_FIRST_LAST', ''),
+                'team': player.get('TEAM_ABBREVIATION', ''),
+                'status': 'Played',
+                'fps': round(fps, 1),
+                'usage': round(usage, 1),
+                'min': float(row.get('MIN', 0)),
+                'pts': float(row.get('PTS', 0)),
+                'reb': float(row.get('REB', 0)),
+                'ast': float(row.get('AST', 0)),
+                'stl': float(row.get('STL', 0)),
+                'blk': float(row.get('BLK', 0)),
+                'tov': float(row.get('TOV', 0)),
+                'matchup': row.get('MATCHUP', ''),
+                'wl': row.get('WL', '')
+            })
+
+    return jsonify(results)
 
 
 @app.route('/static/<path:path>')

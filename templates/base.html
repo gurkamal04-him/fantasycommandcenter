@@ -20,6 +20,7 @@
       font-family: var(--font, 'Inter', system-ui, sans-serif);
     }
     .loading-card {
+      position: relative;
       text-align: center;
       padding: 32px 40px;
       border-radius: 16px;
@@ -111,6 +112,7 @@
           <li><a href="/#projector" class="nav-link" data-page="projector">Win Projector</a></li>
           <li><a href="/#rankings" class="nav-link" data-page="rankings">Rankings</a></li>
           <li><a href="/#minutes" class="nav-link" data-page="minutes">Minutes Slider</a></li>
+          <li><a href="/#my-team" class="nav-link" data-page="my-team">My Team</a></li>
         </ul>
       </nav>
     </div>
@@ -120,6 +122,7 @@
        frontend polls /api/ready and removes this once it returns true. -->
   <div id="loading-overlay" class="loading-overlay" role="status" aria-live="polite" aria-busy="true">
     <div class="loading-card">
+      <button class="modal-close" id="loading-close" aria-label="Skip loading" onclick="document.getElementById('loading-overlay').remove();" style="position:absolute;top:12px;right:12px;padding:6px 12px;line-height:1;font-size:20px;cursor:pointer;z-index:10;background:var(--surface-2, #232a33);border:1px solid var(--line, #2a313b);border-radius:6px;color:var(--ink, #e6e9ef);">×</button>
       <div class="loading-logo">▲</div>
       <div class="loading-title">Fantasy Command Center</div>
       <div class="loading-sub" id="loading-sub">Warming up data caches…</div>
@@ -146,7 +149,30 @@
     </div>
   </footer>
 
+  <!-- =================================================================== -->
+  <!-- ADD PLAYER MODAL (My Team)                                          -->
+  <!-- =================================================================== -->
+  <div id="add-player-modal" class="modal-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="add-player-modal-title">
+    <div class="modal">
+      <header class="modal-header">
+        <h2 class="modal-title" id="add-player-modal-title">Add Player to My Team</h2>
+        <button class="modal-close" id="modal-close" aria-label="Close modal">×</button>
+      </header>
+      <div class="modal-body">
+        <div class="modal-search">
+          <div class="field">
+            <label for="modal-player-search">Search Players</label>
+            <input id="modal-player-search" type="text" placeholder="Type player name..." autocomplete="off">
+            <div class="autocomplete" id="modal-player-ac" hidden></div>
+          </div>
+        </div>
+        <div class="modal-results" id="modal-results"></div>
+        <p class="hint" id="modal-hint" style="margin-top: 12px; text-align: center; color: var(--ink-muted);">Search for a player to add to your team (max 16 players)</p>
+      </div>
+    </div>
+  </div>
+
   {% block scripts %}{% endblock %}
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=4"></script>
 </body>
 </html>

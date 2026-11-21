@@ -111,6 +111,15 @@
   // the overlay disappears immediately.
   if (loadingOverlay) {
     pollReady();
+    // Hard safety net: force-dismiss the overlay if it ever hangs, so the
+    // site can never be permanently stuck behind the loading card.
+    setTimeout(() => {
+      const overlay = $('#loading-overlay');
+      if (overlay && overlay.parentNode) dismissLoading();
+    }, 30000);
+    // Manual close button on loading overlay
+    const loadingClose = $('#loading-close');
+    if (loadingClose) loadingClose.addEventListener('click', dismissLoading);
   }
 
   // The rankings endpoint warms its cache in a background thread, so the
@@ -257,19 +266,57 @@
 
   function renderAutocomplete(players, input, results) {
     if (!players.length) { hide(results); return; }
-    results.innerHTML = players.map(p => `
+    results.innerHTML = players.map(p => {
+      const fps = p.avg_fps || 0;
+      const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
+      // Use initials with circle background; actual faces would require avatar URLs
+      // that could load slowly, so we use initials as fallback
+      const firstName = (p.DISPLAY_FIRST_LAST || '').split(' ')[0] || '';
+      const initials = firstName ? firstName.charAt(0).toUpperCase() : '?';
+      return `
       <div class="autocomplete-item" data-id="${p.PERSON_ID}" data-name="${p.DISPLAY_FIRST_LAST}">
+        <div class="autocomplete-face">${initials}</div>
         <div class="autocomplete-name">${p.DISPLAY_FIRST_LAST}</div>
         <div class="autocomplete-team">${p.TEAM_ABBREVIATION || 'FA'}</div>
-      </div>
-    `).join('');
+        <div class="autocomplete-fps ${fpsClass}" title="Avg FPS: ${fmt(fps)}">${fmt(fps, 1)}</div>
+        <input type="checkbox" class="autocomplete-check" hidden>
+      </div>`;
+    }).join('');
     $$('.autocomplete-item', results).forEach(item => {
       item.addEventListener('click', () => {
-        input.value = item.dataset.name;
-        input.dataset.playerId = item.dataset.id;
-        hide(results);
-        input.dispatchEvent(new Event('change'));
+        // Toggle checkbox on click
+        const checkbox = item.querySelector('.autocomplete-check');
+        if (checkbox) {
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event('change'));
+        } else {
+          // Default: select the player and close
+          input.value = item.dataset.name;
+          input.dataset.playerId = item.dataset.id;
+          hide(results);
+          input.dispatchEvent(new Event('change'));
+        }
       });
+      // Handle checkbox change to select/deselect
+      const checkbox = item.querySelector('.autocomplete-check');
+      if (checkbox) {
+        checkbox.addEventListener('change', e => {
+          // Visual feedback: dim if unchecked
+          item.style.opacity = checkbox.checked ? '1' : '0.5';
+          item.classList.toggle('checked', checkbox.checked);
+          if (!checkbox.checked) {
+            // Deselect: clear input and hide
+            input.value = '';
+            input.dataset.playerId = '';
+            hide(results);
+          } else {
+            // Select: populate input and close
+            input.value = item.dataset.name;
+            input.dataset.playerId = item.dataset.id;
+            hide(results);
+          }
+        });
+      }
     });
     show(results);
   }
@@ -343,8 +390,10 @@
   // ===================================================================
   // Scoreboard (Hub)
   // ===================================================================
-  const todayStr = TODAY;
-  $('#scoreboard-date').value = todayStr;
+  if (typeof TODAY !== 'undefined' && $('#scoreboard-date')) {
+    const todayStr = TODAY;
+    $('#scoreboard-date').value = todayStr;
+  }
 
   async function loadScoreboard(date) {
     const el = $('#scoreboard-games');
@@ -617,7 +666,14 @@
   // Sort selector
   $('#ws-sort')?.addEventListener('change', (e) => {
     wsSortBy = e.target.value;
-    if (wsTeamsData.length) renderWeeklySchedule({ teams: wsTeamsData, week: currentWeek, week_start: '', week_end: '' });
+    if (wsTeamsData.length) {
+      if (window.wsMyTeamFilterActive) {
+        // Re-apply the My Team filter when sorting changes
+        filterScheduleMyTeam(true);
+      } else {
+        renderWeeklySchedule({ teams: wsTeamsData, week: currentWeek, week_start: '', week_end: '' });
+      }
+    }
   });
 
   // Load weekly schedule data
@@ -660,7 +716,7 @@
     const gamesCount = teams.reduce((sum, team) => sum + (team.games_count || 0), 0);
     const b2bCount = teams.reduce((sum, team) => sum + (team.b2b_count || 0), 0);
 
-    metaEl.innerHTML = `
+    let metaHtml = `
       <div class="ws-meta-info">
         <strong>Week ${week}</strong> | ${weekStart} to ${weekEnd} |
         <span class="team-count">${teams.length} teams</span> |
@@ -668,6 +724,13 @@
         <span class="b2b-count">${b2bCount} B2Bs</span>
       </div>
     `;
+
+    if (window.wsMyTeamFilterActive) {
+      const myTeam = getMyTeam();
+      metaHtml += `<div class="ws-meta-info" style="margin-top: 4px; color: var(--accent);">Showing ${teams.length} teams with My Team players (${myTeam.length} players)</div>`;
+    }
+
+    metaEl.innerHTML = metaHtml;
 
     if (!teams.length) {
       tbody.innerHTML = '';
@@ -982,8 +1045,10 @@
 
   // Box Score state
   let bsPlayersData = [];
+  let bsOriginalPlayersData = [];
   let bsSortBy = 'fps';
   let bsSortDir = 'desc';
+  let bsMyTeamFilterActive = false;
 
   function renderBoxScore(data) {
     const tbody = $('#boxscore-results tbody');
@@ -1002,8 +1067,15 @@
 
     meta.innerHTML = metaHtml;
 
-    bsPlayersData = data.players || [];
-    sortAndRenderBoxScore();
+    bsOriginalPlayersData = data.players || [];
+
+    // If My Team filter is active, fetch My Team box score
+    if (bsMyTeamFilterActive) {
+      applyMyTeamBoxScoreFilter();
+    } else {
+      bsPlayersData = bsOriginalPlayersData;
+      sortAndRenderBoxScore();
+    }
   }
 
   function sortAndRenderBoxScore() {
@@ -1022,6 +1094,8 @@
     });
 
     tbody.innerHTML = sorted.map(p => {
+      const isDnp = p.dnp === true;
+
       const fgVal = p.fga > 0 ? (p.fgm/p.fga * 100) : 0;
       const fg3Val = p.fg3a > 0 ? (p.fg3m/p.fg3a * 100) : 0;
       const ftVal = p.fta > 0 ? (p.ftm/p.fta * 100) : 0;
@@ -1052,32 +1126,40 @@
       const fpsVal = p.fps ?? 0;
       const fpsClass = fpsVal >= 25 ? 'fps-good' : 'fps-bad';
 
+      // DNP styling
+      const dnpClass = isDnp ? 'bs-dnp-row' : '';
+      const dnpBadge = isDnp ? '<span class="bs-dnp-badge">DNP</span>' : '';
+      const minDisplay = isDnp ? `<span class="dnp-min">${dnpBadge}</span>` : p.min;
+
+      // For DNP players, show zeros with muted styling
+      const statsStyle = isDnp ? 'style="color: var(--ink-muted)"' : '';
+
       return `
-      <tr>
+      <tr class="${dnpClass}">
         <td class="player-name">${p.player_id ? `<a href="/player/${p.player_id}" class="player-link">${p.name}</a>` : p.name}</td>
         <td class="team-abbr">${p.team}</td>
-        <td class="num">${p.min}</td>
-        <td class="num">${p.pts}</td>
-        <td class="num">${p.reb}</td>
-        <td class="num">${p.ast}</td>
-        <td class="num">${p.stl}</td>
-        <td class="num">${p.blk}</td>
-        <td class="num">${p.tov}</td>
+        <td class="num">${minDisplay}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.pts}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.reb}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.ast}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.stl}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.blk}</td>
+        <td class="num" ${statsStyle}>${isDnp ? '-' : p.tov}</td>
         <td class="num">
-           <div style="font-weight:600; ${fgColor}">${fgPct}%</div>
-           <div style="font-size:10px; color:var(--ink-muted)">${p.fgm}/${p.fga}</div>
+           <div style="font-weight:600; ${fgColor}">${isDnp ? '-' : fgPct + '%'}</div>
+           <div style="font-size:10px; color:var(--ink-muted)">${isDnp ? '-' : p.fgm + '/' + p.fga}</div>
         </td>
         <td class="num">
-           <div style="font-weight:600; ${fg3Color}">${fg3Pct}%</div>
-           <div style="font-size:10px; color:var(--ink-muted)">${p.fg3m}/${p.fg3a}</div>
+           <div style="font-weight:600; ${fg3Color}">${isDnp ? '-' : fg3Pct + '%'}</div>
+           <div style="font-size:10px; color:var(--ink-muted)">${isDnp ? '-' : p.fg3m + '/' + p.fg3a}</div>
         </td>
         <td class="num">
-           <div style="font-weight:600; ${ftColor}">${ftPct}%</div>
-           <div style="font-size:10px; color:var(--ink-muted)">${p.ftm}/${p.fta}</div>
+           <div style="font-weight:600; ${ftColor}">${isDnp ? '-' : ftPct + '%'}</div>
+           <div style="font-size:10px; color:var(--ink-muted)">${isDnp ? '-' : p.ftm + '/' + p.fta}</div>
         </td>
-        <td class="num usage">${p.usage_pct}%</td>
-        <td class="num fps ${fpsClass}">${fmt(fpsVal)}</td>
-        <td class="num ${p.plus_minus > 0 ? 'plus' : p.plus_minus < 0 ? 'minus' : ''}">${signed(p.plus_minus, 0)}</td>
+        <td class="num usage" ${statsStyle}>${isDnp ? '-' : p.usage_pct + '%'}</td>
+        <td class="num fps ${fpsClass}" ${statsStyle}>${isDnp ? '-' : fmt(fpsVal)}</td>
+        <td class="num ${p.plus_minus > 0 ? 'plus' : p.plus_minus < 0 ? 'minus' : ''}" ${statsStyle}>${isDnp ? '-' : signed(p.plus_minus, 0)}</td>
       </tr>
     `;
     }).join('');
@@ -1193,6 +1275,13 @@
       });
     }
 
+    // Filter by My Team if active
+    if (window.rkMyTeamFilterActive) {
+      const team = getMyTeam();
+      const myTeamIds = new Set(team.map(p => p.id.toString()));
+      filtered = filtered.filter(p => myTeamIds.has(p.player_id?.toString()));
+    }
+
     // Sort
     const sorted = [...filtered].sort((a, b) => {
       const va = a[rkSortBy] ?? 0;
@@ -1234,6 +1323,9 @@
       meta.textContent = meta.textContent.replace(/\s*\|\s*Showing \d+ of \d+ players$/, '');
       if (rkSearchTerm) {
         meta.textContent += ` | Showing ${sorted.length} of ${rkPlayersData.length} players`;
+      } else if (window.rkMyTeamFilterActive) {
+        const team = getMyTeam();
+        meta.textContent += ` | Showing ${sorted.length} of ${team.length} My Team players`;
       }
     }
   }
@@ -1684,7 +1776,686 @@
   });
 
   // ===================================================================
+  // My Team — global roster state & UI
+  // ===================================================================
+  const MY_TEAM_KEY = 'nba-fantasy-my-team-v1';
+  const MAX_ROSTER_SIZE = 16;
+
+  function getMyTeam() {
+    try {
+      const raw = localStorage.getItem(MY_TEAM_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveMyTeam(team) {
+    try {
+      localStorage.setItem(MY_TEAM_KEY, JSON.stringify(team));
+    } catch (e) {
+      console.error('Failed to save My Team', e);
+    }
+  }
+
+  function addPlayerToMyTeam(player) {
+    const team = getMyTeam();
+    if (team.length >= MAX_ROSTER_SIZE) return { ok: false, reason: 'Roster full (16 max)' };
+    if (team.some(p => p.id === player.id)) return { ok: false, reason: 'Already on roster' };
+    team.push(player);
+    saveMyTeam(team);
+    return { ok: true };
+  }
+
+  function removePlayerFromMyTeam(playerId) {
+    const team = getMyTeam().filter(p => p.id !== playerId);
+    saveMyTeam(team);
+    return team;
+  }
+
+  function isOnMyTeam(playerId) {
+    return getMyTeam().some(p => p.id === playerId);
+  }
+
+  function updateMyTeamCountDisplays() {
+    const count = getMyTeam().length;
+    const countEls = $$('#my-team-count, #my-team-count-page');
+    countEls.forEach(el => { if (el) el.textContent = `${count}/${MAX_ROSTER_SIZE}`; });
+  }
+
+  // Render the compact My Team roster on the Hub
+  function renderMyTeamHub() {
+    const el = $('#my-team-roster');
+    const team = getMyTeam();
+    if (!el) return;
+    if (!team.length) {
+      el.innerHTML = '<p class="empty">No players added yet. Click "Add Player" to build your roster.</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="my-team-mini-list">
+        ${team.slice(0, 8).map((p, i) => `
+          <div class="my-team-mini-item" data-id="${p.id}">
+            <span class="my-team-mini-num">${i + 1}</span>
+            <span class="my-team-mini-name">${p.name}</span>
+            <span class="my-team-mini-team">${p.team}</span>
+            <button class="btn btn-sm btn-ghost my-team-mini-remove" aria-label="Remove ${p.name}">×</button>
+          </div>
+        `).join('')}
+        ${team.length > 8 ? `<div class="my-team-mini-more">+${team.length - 8} more on My Team page</div>` : ''}
+      </div>
+    `;
+    $$('.my-team-mini-remove', el).forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = btn.closest('.my-team-mini-item');
+        if (item) removePlayerFromMyTeam(item.dataset.id);
+        renderMyTeamHub();
+        renderMyTeamPage();
+        updateMyTeamCountDisplays();
+      });
+    });
+  }
+
+  // Render the full My Team page table
+  async function renderMyTeamPage() {
+    const tbody = $('#my-team-tbody');
+    if (!tbody) return;
+    const team = getMyTeam();
+    if (!team.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">No players on roster. Click "Add Player" to start.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '<tr><td colspan="10" class="loading">Loading season stats…</td></tr>';
+
+    // Fetch season stats for all players on roster
+    const ids = team.map(p => p.id);
+    try {
+      const res = await api('/api/my-team/stats', { method: 'POST', body: JSON.stringify({ player_ids: ids }) });
+      const statsMap = {};
+      (res || []).forEach(p => { statsMap[p.id] = p; });
+
+      tbody.innerHTML = team.map((p, i) => {
+        const s = statsMap[p.id] || {};
+        const fps = s.fps ?? 0;
+        const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
+        return `
+          <tr data-id="${p.id}">
+            <td class="num">${i + 1}</td>
+            <td class="player-name"><a href="/player/${p.id}" class="player-link">${p.name}</a></td>
+            <td class="team-abbr">${p.team}</td>
+            <td class="num">${s.games || 0}</td>
+            <td class="num fps ${fpsClass}">${fmt(fps)}</td>
+            <td class="num usage">${s.usage ?? 0}%</td>
+            <td class="num">${s.min ?? 0}</td>
+            <td class="num">${s.pts ?? 0}</td>
+            <td class="num">${s.reb ?? 0}</td>
+            <td class="num">${s.ast ?? 0}</td>
+            <td class="actions"><button class="btn btn-sm btn-ghost my-team-remove" aria-label="Remove ${p.name}">Remove</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      $$('.my-team-remove', tbody).forEach(btn => {
+        btn.addEventListener('click', () => {
+          const row = btn.closest('tr');
+          if (row) {
+            removePlayerFromMyTeam(row.dataset.id);
+            renderMyTeamPage();
+            renderMyTeamHub();
+            updateMyTeamCountDisplays();
+          }
+        });
+      });
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">Failed to load stats</td></tr>';
+      console.error(e);
+    }
+  }
+
+  // Open the Add Player modal (uses the modal from index.html)
+  // Shows a full list of all players with checkboxes for team membership
+  function openAddPlayerModal() {
+    const modal = $('#add-player-modal');
+    if (!modal) {
+      console.error('Add player modal not found in DOM');
+      return;
+    }
+
+    // Setup search and list rendering (only once)
+    if (!modal.dataset.listSetup) {
+      modal.dataset.listSetup = 'true';
+
+      const searchInput = $('#modal-player-search');
+      const resultsContainer = $('#modal-results');
+      const autocompleteEl = $('#modal-player-ac');
+      if (autocompleteEl) autocompleteEl.hidden = true; // Hide autocomplete dropdown
+
+      let allPlayers = [];
+      let filteredPlayers = [];
+      let searchDebounce = null;
+
+      // Load all players from cache or API
+      async function loadAllPlayers() {
+        if (playerCache.length) {
+          allPlayers = playerCache;
+        } else {
+          try {
+            const data = await api('/api/players/search?limit=500');
+            allPlayers = data;
+            playerCache = data; // Cache for future use
+          } catch (e) {
+            console.error('Failed to load players', e);
+            resultsContainer.innerHTML = '<p class="empty">Failed to load players</p>';
+            return;
+          }
+        }
+        filteredPlayers = [...allPlayers];
+        renderPlayerList();
+      }
+
+      // Render the full player list with checkboxes
+      function renderPlayerList() {
+        const myTeam = getMyTeam();
+        const myTeamIds = new Set(myTeam.map(p => p.id.toString()));
+
+        if (!filteredPlayers.length) {
+          resultsContainer.innerHTML = '<p class="empty">No players match your search</p>';
+          return;
+        }
+
+        resultsContainer.innerHTML = filteredPlayers.map(p => {
+          const fps = p.avg_fps || 0;
+          const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
+          const firstName = (p.DISPLAY_FIRST_LAST || '').split(' ')[0] || '';
+          const initials = firstName ? firstName.charAt(0).toUpperCase() : '?';
+          const isOnTeam = myTeamIds.has(p.PERSON_ID.toString());
+
+          return `
+          <div class="modal-result-item" data-id="${p.PERSON_ID}" data-name="${p.DISPLAY_FIRST_LAST}" data-team="${p.TEAM_ABBREVIATION || 'FA'}">
+            <div class="modal-result-face">${initials}</div>
+            <div class="modal-result-info">
+              <div class="modal-result-name">${p.DISPLAY_FIRST_LAST}</div>
+              <div class="modal-result-meta">
+                <span class="modal-result-team">${p.TEAM_ABBREVIATION || 'FA'}</span>
+                <span class="modal-result-fps ${fpsClass}">${fmt(fps, 1)} FPS</span>
+              </div>
+            </div>
+            <input type="checkbox" class="modal-result-check ${isOnTeam ? 'checked' : ''}" ${isOnTeam ? 'checked' : ''} data-player-id="${p.PERSON_ID}" data-player-name="${p.DISPLAY_FIRST_LAST}" data-player-team="${p.TEAM_ABBREVIATION || 'FA'}">
+          </div>`;
+        }).join('');
+
+        // Attach checkbox handlers
+        $$('.modal-result-check', resultsContainer).forEach(checkbox => {
+          checkbox.addEventListener('change', handleCheckboxChange);
+        });
+
+        // Also allow clicking the row to toggle
+        $$('.modal-result-item', resultsContainer).forEach(item => {
+          item.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+              const checkbox = item.querySelector('.modal-result-check');
+              if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+              }
+            }
+          });
+        });
+      }
+
+      // Handle checkbox change - add/remove from team
+      function handleCheckboxChange(e) {
+        const checkbox = e.target;
+        const playerId = checkbox.dataset.playerId;
+        const playerName = checkbox.dataset.playerName;
+        const playerTeam = checkbox.dataset.playerTeam;
+
+        if (checkbox.checked) {
+          // Add to team
+          const result = addPlayerToMyTeam({ id: parseInt(playerId), name: playerName, team: playerTeam });
+          if (result.ok) {
+            checkbox.classList.add('checked');
+            renderMyTeamHub();
+            renderMyTeamPage();
+            updateMyTeamCountDisplays();
+          } else {
+            checkbox.checked = false;
+            alert(result.reason);
+          }
+        } else {
+          // Remove from team
+          removePlayerFromMyTeam(parseInt(playerId));
+          checkbox.classList.remove('checked');
+          renderMyTeamHub();
+          renderMyTeamPage();
+          updateMyTeamCountDisplays();
+        }
+      }
+
+      // Search input handler - filter in real-time like rankings page
+      searchInput.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => {
+          const q = searchInput.value.trim().toLowerCase();
+          if (!q) {
+            filteredPlayers = [...allPlayers];
+          } else {
+            filteredPlayers = allPlayers.filter(p => {
+              const name = (p.DISPLAY_FIRST_LAST || '').toLowerCase();
+              const tokens = name.split(/[\s'-]+/).filter(Boolean);
+              return tokens.some(t => t.startsWith(q)) || name.includes(q);
+            });
+          }
+          renderPlayerList();
+        }, 50);
+      });
+
+      // Close handlers
+      modal.querySelector('#modal-close').addEventListener('click', () => hide(modal));
+      modal.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) hide(modal);
+      });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(modal); });
+    }
+
+    // Load players and show modal
+    const searchInput = $('#modal-player-search');
+    const resultsContainer = $('#modal-results');
+    searchInput.value = '';
+    resultsContainer.innerHTML = '<p class="loading">Loading players…</p>';
+    show(modal);
+    searchInput.focus();
+
+    // Load players (uses cache if available)
+    loadAllPlayers().then(() => {
+      // Re-render in case search was typed while loading
+    });
+  }
+
+  // My Team filter buttons on other pages (Box Score, etc.)
+  function addMyTeamFilterButton(pageId, containerSelector, loadFn) {
+    const container = $(containerSelector);
+    if (!container || container.querySelector('.my-team-filter-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-primary my-team-filter-btn';
+    btn.textContent = 'My Team Only';
+    btn.dataset.active = 'false';
+    btn.addEventListener('click', () => {
+      const isActive = btn.dataset.active === 'true';
+      btn.dataset.active = isActive ? 'false' : 'true';
+      btn.textContent = isActive ? 'My Team Only' : 'Show All';
+      btn.classList.toggle('active', !isActive);
+      loadFn(!isActive);
+    });
+    container.appendChild(btn);
+  }
+
+  // Box Score: filter to show only My Team players for a given date
+  // This will be called from the boxscore page when "My Team" filter is toggled
+  async function loadMyTeamBoxScore(gameId, date) {
+    const team = getMyTeam();
+    if (!team.length) return [];
+    const ids = team.map(p => p.id);
+    try {
+      const res = await api('/api/my-team/boxscore', {
+        method: 'POST',
+        body: JSON.stringify({ player_ids: ids, date })
+      });
+      return res.players || [];
+    } catch (e) {
+      console.error('My Team boxscore failed', e);
+      return [];
+    }
+  }
+
+  async function applyMyTeamBoxScoreFilter() {
+    const team = getMyTeam();
+    if (!team.length) {
+      bsPlayersData = [];
+      sortAndRenderBoxScore();
+      return;
+    }
+
+    const gameId = $('#bs-game-id').value.trim();
+    if (!gameId) {
+      bsPlayersData = [];
+      sortAndRenderBoxScore();
+      return;
+    }
+
+    // Extract date from game data or use a reasonable fallback
+    // The boxscore data should have game_date
+    const date = new Date().toISOString().split('T')[0]; // fallback
+
+    try {
+      const myTeamPlayers = await loadMyTeamBoxScore(gameId, date);
+
+      // Merge: create rows for all My Team players (some may be DNP)
+      const myTeamIds = new Set(team.map(p => p.id.toString()));
+      bsPlayersData = [];
+
+      // First add players who played
+      for (const p of myTeamPlayers) {
+        bsPlayersData.push(p);
+      }
+
+      // Then add DNP players from My Team who weren't in the boxscore
+      for (const p of team) {
+        if (!myTeamPlayers.find(mp => mp.player_id === p.id)) {
+          bsPlayersData.push({
+            player_id: p.id,
+            name: p.name,
+            team: p.team,
+            min: 'DNP',
+            pts: 0,
+            reb: 0,
+            ast: 0,
+            stl: 0,
+            blk: 0,
+            tov: 0,
+            fgm: 0,
+            fga: 0,
+            fg3m: 0,
+            fg3a: 0,
+            ftm: 0,
+            fta: 0,
+            usage_pct: 0,
+            fps: 0,
+            plus_minus: 0,
+            dnp: true
+          });
+        }
+      }
+
+      sortAndRenderBoxScore();
+    } catch (e) {
+      console.error('Failed to apply My Team box score filter', e);
+      bsPlayersData = [];
+      sortAndRenderBoxScore();
+    }
+  }
+
+  // ===================================================================
   // Init
   // ===================================================================
+  // Initialize My Team displays on load
+  updateMyTeamCountDisplays();
+  renderMyTeamHub();
+
+  // Add Player button handlers
+  $('#my-team-add-btn')?.addEventListener('click', openAddPlayerModal);
+  $('#my-team-add-btn-page')?.addEventListener('click', openAddPlayerModal);
+
+  // Render My Team page when navigated to
+  // Watch for page activation
+  const originalActivatePage = activatePage;
+  activatePage = function(pageId) {
+    originalActivatePage(pageId);
+    if (pageId === 'my-team') {
+      renderMyTeamPage();
+    }
+    // Add My Team filter button to Box Score page
+    if (pageId === 'boxscore') {
+      addMyTeamFilterButton('boxscore', '#bs-controls', async (filterMyTeam) => {
+        bsMyTeamFilterActive = filterMyTeam;
+        if (filterMyTeam) {
+          await applyMyTeamBoxScoreFilter();
+        } else {
+          bsPlayersData = bsOriginalPlayersData;
+          sortAndRenderBoxScore();
+        }
+      });
+    }
+    // Add My Team filter button to Start/Sit page
+    if (pageId === 'startsit') {
+      addMyTeamFilterButton('startsit', '#ss-controls', (filterMyTeam) => {
+        filterStartSitMyTeam(filterMyTeam);
+      });
+    }
+    // Add My Team filter button to Trade Analyzer page
+    if (pageId === 'trade') {
+      addMyTeamFilterButton('trade', '#trade-controls', (filterMyTeam) => {
+        filterTradeMyTeam(filterMyTeam);
+      });
+    }
+    // Add My Team filter button to Win Projector page
+    if (pageId === 'projector') {
+      addMyTeamFilterButton('projector', '#projector-controls', (filterMyTeam) => {
+        filterProjectorMyTeam(filterMyTeam);
+      });
+    }
+    // Add My Team filter button to Rankings page
+    if (pageId === 'rankings') {
+      addMyTeamFilterButton('rankings', '#rankings-controls', (filterMyTeam) => {
+        filterRankingsMyTeam(filterMyTeam);
+      });
+    }
+    // Add My Team filter button to Minutes Slider page
+    if (pageId === 'minutes') {
+      addMyTeamFilterButton('minutes', '#minutes-controls', (filterMyTeam) => {
+        filterMinutesMyTeam(filterMyTeam);
+      });
+    }
+    // Add My Team filter button to Schedule page
+    if (pageId === 'schedule') {
+      addMyTeamFilterButton('schedule', '#schedule-controls', (filterMyTeam) => {
+        filterScheduleMyTeam(filterMyTeam);
+      });
+    }
+  };
+
+// Placeholder filter functions for other pages
+function filterStartSitMyTeam(active) {
+  const team = getMyTeam();
+  const inputA = $('#ss-player-a');
+  const inputB = $('#ss-player-b');
+
+  if (!active) {
+    // Clear the auto-filled state when filter is turned off
+    return;
+  }
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    // Turn off the button
+    const btn = $('#ss-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Auto-fill the first two players from My Team
+  if (team.length >= 1) {
+    inputA.value = team[0].name;
+    inputA.dataset.playerId = team[0].id;
+  }
+  if (team.length >= 2) {
+    inputB.value = team[1].name;
+    inputB.dataset.playerId = team[1].id;
+  }
+}
+
+function filterTradeMyTeam(active) {
+  const team = getMyTeam();
+
+  if (!active) {
+    return;
+  }
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    const btn = $('#trade-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Fill Roster A (You Receive) with My Team players
+  const rosterA = $('#trade-roster-a');
+  if (!rosterA) return;
+
+  // Clear existing inputs
+  const inputsA = $$('#trade-roster-a input');
+  inputsA.forEach((input, idx) => {
+    if (team[idx]) {
+      input.value = team[idx].name;
+      input.dataset.playerId = team[idx].id;
+    } else {
+      input.value = '';
+      delete input.dataset.playerId;
+    }
+  });
+}
+
+function filterProjectorMyTeam(active) {
+  const team = getMyTeam();
+
+  if (!active) {
+    return;
+  }
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    const btn = $('#projector-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Fetch season stats for My Team players to calculate projected totals
+  // We'll use the existing /api/my-team/stats endpoint
+  const ids = team.map(p => p.id);
+  api('/api/my-team/stats', {
+    method: 'POST',
+    body: JSON.stringify({ player_ids: ids })
+  }).then(res => {
+    const players = res || [];
+    if (!players.length) return;
+
+    // Calculate total FPS for the team
+    const totalFpsPerGame = players.reduce((sum, p) => sum + (p.fps || 0), 0);
+    const totalGamesPlayed = Math.max(...players.map(p => p.games || 0));
+
+    // Estimate: current points = avg_fps * games_played (for most played player)
+    // Projected total = avg_fps * total_games_in_season
+    const seasonGames = 82; // NBA season
+    const myCur = totalFpsPerGame * totalGamesPlayed;
+    const myProj = totalFpsPerGame * seasonGames;
+    const myGP = totalGamesPlayed;
+    const myTot = seasonGames;
+
+    // Fill in the projector inputs
+    $('#myCur').value = Math.round(myCur * 10) / 10;
+    $('#myProj').value = Math.round(myProj * 10) / 10;
+    $('#myGP').value = myGP;
+    $('#myTot').value = myTot;
+
+    // Trigger re-render (the render function is in the same IIFE scope)
+    render();
+  }).catch(e => console.error('Failed to load My Team stats for projector:', e));
+}
+
+function filterRankingsMyTeam(active) {
+  if (!active) {
+    // Turn off My Team filter and re-render with all players
+    window.rkMyTeamFilterActive = false;
+    sortAndRenderRankings();
+    return;
+  }
+
+  const team = getMyTeam();
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    const btn = $('#rankings-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Create a set of My Team player IDs for fast lookup
+  const myTeamIds = new Set(team.map(p => p.id.toString()));
+
+  // We need to filter the existing rkPlayersData to only show My Team players
+  // Since sortAndRenderRankings already handles filtering via rkSearchTerm,
+  // we'll store the My Team filter state and modify sortAndRenderRankings
+  window.rkMyTeamFilterActive = true;
+  sortAndRenderRankings();
+}
+
+function filterMinutesMyTeam(active) {
+  const team = getMyTeam();
+
+  if (!active) {
+    return;
+  }
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    const btn = $('#minutes-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Auto-load the first My Team player
+  const firstPlayer = team[0];
+  const input = $('#ms-player');
+  if (input && firstPlayer) {
+    input.value = firstPlayer.name;
+    input.dataset.playerId = firstPlayer.id;
+    loadMinutesProjection(firstPlayer.id);
+  }
+}
+
+function filterScheduleMyTeam(active) {
+  const team = getMyTeam();
+
+  if (!active) {
+    // Turn off My Team filter and re-render with all teams
+    window.wsMyTeamFilterActive = false;
+    if (wsTeamsData.length) {
+      renderWeeklySchedule({ teams: wsTeamsData, week: currentWeek, week_start: '', week_end: '' });
+    }
+    return;
+  }
+
+  if (!team.length) {
+    alert('My Team is empty. Add players on the My Team page first.');
+    const btn = $('#schedule-controls .my-team-filter-btn');
+    if (btn) {
+      btn.dataset.active = 'false';
+      btn.textContent = 'My Team Only';
+      btn.classList.remove('active');
+    }
+    return;
+  }
+
+  // Get unique team abbreviations from My Team players
+  const myTeamAbbreviations = new Set(team.map(p => p.team).filter(Boolean));
+
+  // Filter wsTeamsData to only include teams with My Team players
+  const filteredTeams = wsTeamsData.filter(t => myTeamAbbreviations.has(t.abbreviation));
+
+  window.wsMyTeamFilterActive = true;
+  renderWeeklySchedule({ teams: filteredTeams, week: currentWeek, week_start: '', week_end: '' });
+}
+
   console.log('NBA Fantasy Command Center loaded');
 })();
