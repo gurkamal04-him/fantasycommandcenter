@@ -75,7 +75,7 @@
         else if (data.ready) loadingSub.textContent = 'Ready!';
       }
 
-      return !!data.ready;
+      return { ready: !!data.ready };
     } catch (e) {
       return { ready: false };
     }
