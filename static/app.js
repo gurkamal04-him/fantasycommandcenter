@@ -186,12 +186,13 @@
 
   async function loadPlayerCache() {
     if (playerCacheLoaded) return;
-    playerCacheLoaded = true;
     try {
       const data = await api('/api/players/search?limit=500');
       playerCache = data;
+      playerCacheLoaded = true;
     } catch (e) {
       console.warn('Player cache load failed', e);
+      // Don't mark as loaded on failure, allow retry
     }
   }
 
@@ -1903,7 +1904,7 @@
           allPlayers = playerCache;
         } else {
           try {
-            const data = await api('/api/players/search?limit=500');
+            const data = await api('/api/players/search?limit=500&include_fps=true');
             allPlayers = data;
             playerCache = data; // Cache for future use
           } catch (e) {
@@ -2141,6 +2142,9 @@
   // ===================================================================
   // Init
   // ===================================================================
+  // Preload player cache on page load for instant autocomplete
+  loadPlayerCache();
+
   // Initialize My Team displays on load
   updateMyTeamCountDisplays();
   renderMyTeamHub();
