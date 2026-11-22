@@ -266,57 +266,19 @@
 
   function renderAutocomplete(players, input, results) {
     if (!players.length) { hide(results); return; }
-    results.innerHTML = players.map(p => {
-      const fps = p.avg_fps || 0;
-      const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
-      // Use initials with circle background; actual faces would require avatar URLs
-      // that could load slowly, so we use initials as fallback
-      const firstName = (p.DISPLAY_FIRST_LAST || '').split(' ')[0] || '';
-      const initials = firstName ? firstName.charAt(0).toUpperCase() : '?';
-      return `
+    results.innerHTML = players.map(p => `
       <div class="autocomplete-item" data-id="${p.PERSON_ID}" data-name="${p.DISPLAY_FIRST_LAST}">
-        <div class="autocomplete-face">${initials}</div>
         <div class="autocomplete-name">${p.DISPLAY_FIRST_LAST}</div>
         <div class="autocomplete-team">${p.TEAM_ABBREVIATION || 'FA'}</div>
-        <div class="autocomplete-fps ${fpsClass}" title="Avg FPS: ${fmt(fps)}">${fmt(fps, 1)}</div>
-        <input type="checkbox" class="autocomplete-check" hidden>
-      </div>`;
-    }).join('');
+      </div>
+    `).join('');
     $$('.autocomplete-item', results).forEach(item => {
       item.addEventListener('click', () => {
-        // Toggle checkbox on click
-        const checkbox = item.querySelector('.autocomplete-check');
-        if (checkbox) {
-          checkbox.checked = !checkbox.checked;
-          checkbox.dispatchEvent(new Event('change'));
-        } else {
-          // Default: select the player and close
-          input.value = item.dataset.name;
-          input.dataset.playerId = item.dataset.id;
-          hide(results);
-          input.dispatchEvent(new Event('change'));
-        }
+        input.value = item.dataset.name;
+        input.dataset.playerId = item.dataset.id;
+        hide(results);
+        input.dispatchEvent(new Event('change'));
       });
-      // Handle checkbox change to select/deselect
-      const checkbox = item.querySelector('.autocomplete-check');
-      if (checkbox) {
-        checkbox.addEventListener('change', e => {
-          // Visual feedback: dim if unchecked
-          item.style.opacity = checkbox.checked ? '1' : '0.5';
-          item.classList.toggle('checked', checkbox.checked);
-          if (!checkbox.checked) {
-            // Deselect: clear input and hide
-            input.value = '';
-            input.dataset.playerId = '';
-            hide(results);
-          } else {
-            // Select: populate input and close
-            input.value = item.dataset.name;
-            input.dataset.playerId = item.dataset.id;
-            hide(results);
-          }
-        });
-      }
     });
     show(results);
   }
