@@ -390,8 +390,8 @@
   // ===================================================================
   // Scoreboard (Hub)
   // ===================================================================
-  if (typeof TODAY !== 'undefined' && $('#scoreboard-date')) {
-    const todayStr = TODAY;
+  let todayStr = typeof TODAY !== 'undefined' ? TODAY : '';
+  if (todayStr && $('#scoreboard-date')) {
     $('#scoreboard-date').value = todayStr;
   }
 
@@ -512,9 +512,9 @@
 
   // Initialize box score today's games panel
   const bsDateInput = $('#bs-scoreboard-date');
-  if (bsDateInput) {
-    bsDateInput.value = TODAY;
-    loadBSTodayGames(TODAY);
+  if (bsDateInput && todayStr) {
+    bsDateInput.value = todayStr;
+    loadBSTodayGames(todayStr);
     $('#bs-sb-refresh')?.addEventListener('click', () => loadBSTodayGames(bsDateInput.value));
   }
 
