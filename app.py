@@ -262,7 +262,7 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 3978, 'DISPLAY_FIRST_LAST': 'Nikola Jokic', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
     {'PERSON_ID': 3033, 'DISPLAY_FIRST_LAST': 'Kevin Durant', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX'},
     {'PERSON_ID': 6430, 'DISPLAY_FIRST_LAST': 'Jayson Tatum', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 6589, 'DISPLAY_FIRST_LAST': 'Trae Young', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
+    {'PERSON_ID': 6589, 'DISPLAY_FIRST_LAST': 'Trae Young', 'TEAM_ID': 27, 'TEAM_ABBREVIATION': 'WAS'},
     {'PERSON_ID': 4278039, 'DISPLAY_FIRST_LAST': 'Anthony Edwards', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN'},
     {'PERSON_ID': 4395651, 'DISPLAY_FIRST_LAST': 'Victor Wembanyama', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS'},
     {'PERSON_ID': 4711294, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC'},
@@ -285,7 +285,7 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628384, 'DISPLAY_FIRST_LAST': 'Karl-Anthony Towns', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN'},
     {'PERSON_ID': 1628415, 'DISPLAY_FIRST_LAST': 'Anthony Davis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
     {'PERSON_ID': 203076, 'DISPLAY_FIRST_LAST': 'Damian Lillard', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 203110, 'DISPLAY_FIRST_LAST': 'Paul George', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
+    {'PERSON_ID': 202331, 'DISPLAY_FIRST_LAST': 'Paul George', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
     {'PERSON_ID': 203083, 'DISPLAY_FIRST_LAST': 'James Harden', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
     {'PERSON_ID': 203081, 'DISPLAY_FIRST_LAST': 'Russell Westbrook', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
     {'PERSON_ID': 202339, 'DISPLAY_FIRST_LAST': 'Kyrie Irving', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
@@ -345,8 +345,10 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628850, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
     {'PERSON_ID': 1628861, 'DISPLAY_FIRST_LAST': 'GG Jackson', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
     {'PERSON_ID': 1628872, 'DISPLAY_FIRST_LAST': 'Jordan Hawkins', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP'},
+    {'PERSON_ID': 203110, 'DISPLAY_FIRST_LAST': 'Draymond Green', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
     {'PERSON_ID': 1628883, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
     {'PERSON_ID': 1628894, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
+    {'PERSON_ID': 1629636, 'DISPLAY_FIRST_LAST': 'Coby White', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI'},
     {'PERSON_ID': 1628905, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
     {'PERSON_ID': 1628916, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
     {'PERSON_ID': 1628927, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
@@ -392,7 +394,7 @@ _FALLBACK_ESPN_ID_MAP = {
     1966: 1966,        # LeBron James
     3945274: 3945274,  # Luka Doncic
     4278039: 4278039,  # Anthony Edwards
-    4395651: 4395651,  # Victor Wembanyama
+    4395651: 5104157,  # Victor Wembanyama (NBA.com 4395651 -> ESPN 5104157)
     4711294: 4711294,  # Chet Holmgren
     4701230: 4701230,  # Paolo Banchero
     4433249: 4433249,  # Franz Wagner
@@ -411,13 +413,13 @@ _FALLBACK_ESPN_ID_MAP = {
     1628384: 1628384,  # Karl-Anthony Towns
     1628415: 1628415,  # Anthony Davis
     203076: 203076,    # Damian Lillard
-    203110: 203110,    # Paul George
+    202331: 202331,    # Paul George (NBA.com ID)
     203083: 203083,    # James Harden
     203081: 203081,    # Russell Westbrook
     202339: 202339,    # Kyrie Irving
     202684: 202684,    # Kawhi Leonard
     202324: 202324,    # Bradley Beal
-    202322: 202322,    # DeMar DeRozan
+    202322: 3978,      # DeMar DeRozan (NBA.com 202322 -> ESPN 3978)
     202704: 202704,    # Klay Thompson
     203460: 203460,    # Jimmy Butler
     203484: 203484,    # Bam Adebayo
@@ -500,10 +502,19 @@ _FALLBACK_ESPN_ID_MAP = {
     1629191: 1629191,  # Jordan Walsh (duplicate)
     1629202: 1629202,  # Olivier-Maxence Prosper (duplicate)
     1629213: 1629213,  # Seth Lundy (duplicate)
+    # Additional players whose ESPN box score IDs differ from NBA.com PERSON_IDs
+    203110: 6589,      # Draymond Green (NBA.com 203110 -> ESPN 6589)
+    1629636: 4395651,  # Coby White (NBA.com 1629636 -> ESPN 4395651)
 }
 
-# Reverse map: ESPN athlete ID -> curated PERSON_ID (for players where they differ)
-_ESPN_TO_CURATED_ID_MAP = {espn: curated for curated, espn in _FALLBACK_ESPN_ID_MAP.items() if espn != curated}
+# Reverse map: ESPN athlete ID -> curated PERSON_ID
+# Must include ALL mappings so that when an ESPN ID appears in a box score,
+# we correctly map it to the curated PERSON_ID. This prevents collisions
+# where different players share the same curated ID as someone else's ESPN ID
+# (e.g. DeMar DeRozan ESPN ID 3978 = Jokic curated ID 3978).
+_ESPN_TO_CURATED_ID_MAP = {espn: curated for curated, espn in _FALLBACK_ESPN_ID_MAP.items()}
+# Also add Wembanyama's second ID (1628806) which is used in some ESPN endpoints
+_ESPN_TO_CURATED_ID_MAP[1628806] = 4395651
 
 
 def _match_player_in_box(player: dict, fallback_id: int) -> bool:
@@ -2121,7 +2132,7 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
 
         # Sort by total FPS descending, top 200
         rankings.sort(key=lambda x: -x['total_fps'])
-        return rankings[:200]
+        return rankings[:500]
     except Exception as e:
         print(f"Error fetching player rankings: {e}")
         return []
