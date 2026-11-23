@@ -66,44 +66,411 @@
     background: var(--accent);
   }
 
-  .stats-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-    margin-bottom: 24px;
-  }
-  .stat-group-label {
+  /* Position badges */
+  .position-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
     font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: white;
+  }
+  .pos-PG { background: #22c55e; }  /* Green */
+  .pos-SG { background: #f59e0b; }  /* Amber */
+  .pos-SF { background: #3b82f6; }  /* Blue */
+  .pos-PF { background: #8b5cf6; }  /* Purple */
+  .pos-C  { background: #ef4444; }  /* Red */
+  .pos-G  { background: #14b8a6; }  /* Teal */
+  .pos-F  { background: #f97316; }  /* Orange */
+
+  /* Minutes Slider Section */
+  .ms-section {
+    margin: 24px 0;
+    padding: 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .ms-section h3 {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--ink-muted);
-    font-weight: 700;
-    padding-left: 4px;
   }
-  .stat-row {
+  .ms-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .ms-slider-row label {
+    min-width: 130px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ms-minutes-output {
+    min-width: 60px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--accent);
+    font-family: var(--font-display);
+  }
+  .ms-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ms-input-row input[type="range"] {
+    flex: 1;
+    max-width: 400px;
+    accent-color: var(--accent);
+  }
+  .ms-input-row input[type="text"] {
+    width: 100px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-display);
+  }
+  .ms-input-row input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+  }
+  .ms-ticks {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+    font-size: 10px;
+    color: var(--ink-muted);
+  }
+  .ms-projection {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    grid-template-columns: 180px 1fr;
+    gap: 24px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .ms-big-fps {
+    text-align: center;
+    padding: 20px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+  }
+  .ms-fps-val {
+    display: block;
+    font-size: 48px;
+    font-weight: 700;
+    font-family: var(--font-display);
+    color: var(--good);
+    line-height: 1;
+  }
+  .ms-fps-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+    margin-top: 4px;
+  }
+  .ms-breakdown {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
   }
-  .stat-card {
+  .ms-line {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+  }
+  .ms-stat {
+    min-width: 50px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ms-val {
+    flex: 1;
+    text-align: right;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .ms-contrib {
+    min-width: 60px;
+    text-align: right;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .ms-pos { color: var(--good); }
+  .ms-neg { color: var(--bad); }
+  .ms-stats {
+    margin-top: 20px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .ms-stat-tile {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px 16px;
     background: var(--surface);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
     border-radius: var(--radius);
-    padding: 14px 12px;
     text-align: center;
-    transition: transform var(--transition), box-shadow var(--transition);
   }
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-sm);
-  }
-  .stat-card .value {
-    font-size: 26px;
+  .ms-stat-val {
+    font-size: 24px;
     font-weight: 700;
     font-family: var(--font-display);
     color: var(--ink);
-    line-height: 1.1;
+    line-height: 1;
+  }
+  .ms-stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    margin-top: 4px;
+  }
+  .ms-stat-val.good { color: var(--good); }
+  .ms-stat-val.bad { color: var(--bad); }
+
+  /* Season Averages Reference (Static) */
+  .ms-season-ref {
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .ms-season-ref h4 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+  }
+  .ms-season-ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 12px;
+  }
+  .ms-season-ref-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+  }
+  .ms-season-ref-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+  }
+  .ms-season-ref-val {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font-display);
+    color: var(--ink);
+  }
+  .ms-season-ref-delta {
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .ms-season-ref-delta.good { color: var(--good); }
+  .ms-season-ref-delta.bad { color: var(--bad); }
+  .ms-season-ref-delta.neutral { color: var(--ink-muted); }
+
+  /* Playoff Schedule */
+  .playoff-section {
+    margin: 24px 0;
+    padding: 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .playoff-section h3 {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+  }
+  .playoff-table-wrap { overflow-x: auto; }
+  .playoff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .playoff-table th, .playoff-table td {
+    padding: 10px 12px;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .playoff-table th {
+    font-weight: 600;
+    color: var(--ink-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--surface-3);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .playoff-table td:first-child, .playoff-table th:first-child {
+    text-align: left;
+    font-weight: 600;
+  }
+  .playoff-table tbody tr:hover { background: var(--surface-3); }
+  .playoff-game-count {
+    display: inline-block;
+    min-width: 28px;
+    height: 22px;
+    line-height: 22px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+  }
+  .playoff-4 { background: #22c55e; }  /* Green */
+  .playoff-3 { background: #6b7280; color: white; }  /* Light gray */
+  .playoff-2 { background: #ef4444; }  /* Red */
+  .playoff-1 { background: #f59e0b; }  /* Amber */
+  .playoff-0 { background: var(--ink-muted); }  /* Gray */
+  .playoff-total {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* Playoff Badge - compact display near player name */
+  .playoff-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 13px;
+  }
+  .playoff-label {
+    font-weight: 600;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+  }
+  .playoff-games {
+    display: inline-flex;
+    gap: 4px;
+  }
+  .playoff-games span {
+    min-width: 28px;
+    height: 22px;
+    line-height: 22px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+  }
+  .playoff-games .playoff-4 { background: #22c55e; }
+  .playoff-games .playoff-3 { background: #6b7280; color: white; }
+  .playoff-games .playoff-2 { background: #ef4444; }
+  .playoff-games .playoff-1 { background: #f59e0b; }
+  .playoff-games .playoff-0 { background: var(--ink-muted); }
+
+  /* Inline playoff games in player header - compact badge style */
+  .playoff-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .playoff-badge-inline.playoff-4 { background: #22c55e; }
+  .playoff-badge-inline.playoff-3 { background: #6b7280; color: white; }
+  .playoff-badge-inline.playoff-2 { background: #ef4444; }
+  .playoff-badge-inline.playoff-1 { background: #f59e0b; }
+  .playoff-badge-inline.playoff-0 { background: var(--ink-muted); }
+
+  /* Season Averages Cards (Stat Bubbles) - Full width middle section */
+  .stats-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin: 16px 0;
+    width: 100%;
+  }
+  .stat-group-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .stat-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .stat-card {
+    flex: 1 1 calc(100% / 4); /* 4 cards per row max - wider cards taking full middle section */
+    min-width: 100px;
+    max-width: none;
+    padding: 18px 20px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    text-align: center;
+    transition: border-color var(--transition), transform var(--transition);
+  }
+  .stat-card:hover {
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+  }
+  .stat-card.fps { border-left: 3px solid var(--accent); }
+  .stat-card.usage { border-left: 3px solid var(--warn); }
+  .stat-card.bad { border-left: 3px solid var(--bad); }
+  .stat-card .value {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--ink);
   }
   .stat-card .label {
     font-size: 10px;
@@ -112,94 +479,29 @@
     color: var(--ink-muted);
     margin-top: 4px;
   }
-  .stat-card.fps { border-left-color: var(--good); }
-  .stat-card.fps .value { color: var(--good); }
-  .stat-card.usage { border-left-color: var(--accent); }
-  .stat-card.usage .value { color: var(--accent); }
-  .stat-card.bad { border-left-color: var(--bad); }
+  .stat-card.fps .value { color: var(--accent); }
+  .stat-card.usage .value { color: var(--warn); }
   .stat-card.bad .value { color: var(--bad); }
 
-  .section {
-    margin-bottom: 32px;
-  }
-  .section h2 {
-    font-size: 16px;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .table-wrap { overflow-x: auto; }
-  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.data-table th, table.data-table td {
-    padding: 10px 12px;
-    text-align: right;
-    border-bottom: 1px solid var(--line);
-  }
-  table.data-table th {
-    text-align: right;
-    font-weight: 600;
+  /* Per-36 Minutes Projection - Baseline stats in light gray */
+  .ms-baseline {
     color: var(--ink-muted);
+    font-size: 12px;
+    min-width: 50px;
+    text-align: right;
+    opacity: 0.7;
+  }
+  .ms-delta {
     font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: var(--surface-2);
-    position: sticky;
-    top: 0;
-    z-index: 1;
-  }
-  table.data-table td:first-child, table.data-table th:first-child {
-    text-align: left;
-  }
-  table.data-table td:nth-child(2), table.data-table th:nth-child(2) {
-    text-align: center;
-  }
-  table.data-table td:nth-child(3), table.data-table th:nth-child(3) {
-    text-align: center;
-  }
-  table.data-table td:nth-child(4), table.data-table th:nth-child(4) {
-    text-align: center;
-  }
-  table.data-table tbody tr:hover { background: var(--surface-2); }
-  table.data-table .dnp-row { opacity: 0.5; }
-  table.data-table .dnp-row td { color: var(--ink-muted); }
-  table.data-table .fps-cell { font-weight: 700; color: var(--good); }
-  table.data-table .fps-cell.bad { color: var(--bad); }
-  table.data-table .usage-cell { color: var(--accent); font-weight: 600; }
-  table.data-table .started-yes { color: var(--good); }
-  table.data-table .started-no { color: var(--ink-muted); }
-
-  .tabs {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 4px;
-  }
-  .tab {
-    padding: 8px 16px;
-    background: none;
-    border: none;
-    color: var(--ink-soft);
-    font-size: 13px;
     font-weight: 600;
-    cursor: pointer;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    transition: color var(--transition), background var(--transition);
+    min-width: 45px;
+    text-align: right;
+    margin-left: 8px;
   }
-  .tab:hover { color: var(--ink); background: var(--surface-2); }
-  .tab.active { color: var(--accent); background: var(--surface); border-bottom: 2px solid var(--accent); margin-bottom: -1px; }
-
-  .empty-state { text-align: center; padding: 48px; color: var(--ink-muted); }
-
-  @media (max-width: 768px) {
-    .player-header { flex-direction: column; text-align: center; }
-    .player-meta { justify-content: center; }
-    .stat-card { padding: 10px 8px; }
-    .stat-card .value { font-size: 20px; }
-    table.data-table { font-size: 12px; }
-    table.data-table th, table.data-table td { padding: 8px 6px; }
-  }
+  .ms-delta.good { color: var(--good); }
+  .ms-delta.bad { color: var(--bad); }
+  .ms-delta.neutral { color: var(--ink-muted); }
+  .ms-line .ms-baseline { opacity: 0.5; }
 </style>
 {% endblock %}
 
@@ -221,18 +523,33 @@
       {% endif %}
     </div>
     <div class="player-info">
-      <h1>{{ player.name }}</h1>
+      <h1>{{ player.name }}
+        {% if player.position %}
+        <span class="position-badge pos-{{ player.position }}">{{ player.position }}</span>
+        {% endif %}
+      </h1>
       <div class="player-meta">
         {% if player.team %}
         <span class="team-badge">{{ player.team }}</span>
         {% endif %}
-        {% if player.position %}<span><strong>Pos:</strong> {{ player.position }}</span>{% endif %}
         {% if player.jersey %}<span><strong>#:</strong> {{ player.jersey }}</span>{% endif %}
         {% if player.height %}<span><strong>Ht:</strong> {{ player.height }}</span>{% endif %}
         {% if player.weight %}<span><strong>Wt:</strong> {{ player.weight }} lbs</span>{% endif %}
         {% if player.age %}<span><strong>Age:</strong> {{ player.age }}</span>{% endif %}
         {% if player.experience %}<span><strong>Exp:</strong> {{ player.experience }}</span>{% endif %}
       </div>
+      <!-- Compact Playoff Schedule Box in header -->
+      {% if player.team %}
+      <div class="playoff-schedule-box" style="margin-top: 16px; padding: 12px 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);">
+        <div style="display: inline-flex; gap: 6px; align-items: center;">
+          <span style="font-size: 11px; font-weight: 600; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em;">Playoff</span>
+          {% set schedule = get_playoff_schedule(player.team).split('/') %}
+          {% for week, games in [('W20', schedule[0]), ('W21', schedule[1]), ('W22', schedule[2])] %}
+            <span class="playoff-badge-inline playoff-{{ games }}" style="min-width: 36px; height: 24px; line-height: 24px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 700; text-align: center; display: inline-flex; justify-content: center;">{{ games }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -341,6 +658,33 @@
       </div>
     </div>
     <div id="dr-results" style="margin-top:14px;"></div>
+  </div>
+
+  <!-- Minutes Slider / Per-36 Projection Section -->
+  <div class="ms-section">
+    <h3>Minutes Projection (Per-36)</h3>
+    <div class="ms-slider-row">
+      <label for="pms-minutes">Minutes per Game</label>
+      <output id="pms-minutes-val" class="ms-minutes-output">24:00</output>
+    </div>
+    <div class="ms-input-row">
+      <input id="pms-minutes" type="range" min="0" max="48" step="0.5" value="24">
+      <input id="pms-minutes-input" type="text" placeholder="e.g., 38:59 or 38.5" title="Enter minutes as decimal (38.5) or mm:ss (38:59) or mmss (3859)">
+    </div>
+    <div class="ms-baseline-info" style="font-size: 11px; color: var(--ink-muted); margin-top: 8px; display: none;" id="pms-baseline-info"></div>
+    <div class="ms-ticks">
+      <span>0</span><span>6</span><span>12</span><span>18</span><span>24</span><span>30</span><span>36</span><span>42</span><span>48</span>
+    </div>
+    <div class="ms-projection">
+      <div class="ms-big-fps">
+        <span class="ms-fps-val" id="pms-fps-val">--</span>
+        <span class="ms-fps-label">Projected FPS</span>
+      </div>
+      <div class="ms-breakdown" id="pms-breakdown"></div>
+    </div>
+    <div class="ms-stats" id="pms-stats"></div>
+    <!-- Season Averages Reference (Static) -->
+    <div class="ms-season-ref" id="pms-season-ref"></div>
   </div>
 
   <!-- Tabs -->
@@ -610,6 +954,209 @@
   document.addEventListener('DOMContentLoaded', () => {
     initDateRange();
     loadPeriodFps();
+    initMinutesProjection();
+    loadPlayoffSchedule();
   });
+
+  // ================================================================
+  // Minutes Slider / Per-36 Projection (Player Profile)
+  // ================================================================
+  let pmsData = null;
+
+  async function initMinutesProjection() {
+    try {
+      const res = await fetch(`/api/player/${playerId}/minutes-projection`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      pmsData = data;
+      // Initialize slider at player's actual average minutes
+      if (pmsData && pmsData.avg_min) {
+        syncMinutesInputs(pmsData.avg_min);
+      } else {
+        renderMinutesProjection();
+      }
+    } catch (e) {
+      console.error('Failed to load minutes projection:', e);
+    }
+  }
+
+  function parseMinutesInput(val) {
+    // Accept "38:59" (mm:ss) or "38.5" (decimal) or "3859" (mmss without colon)
+    const s = val.trim();
+    if (!s) return null;
+    if (s.includes(':')) {
+      const [m, sec] = s.split(':').map(Number);
+      if (isNaN(m) || isNaN(sec)) return null;
+      return m + sec / 60;
+    }
+    // If 4+ digits like "3859", interpret as mmss
+    if (/^\d{4,}$/.test(s)) {
+      const m = parseInt(s.slice(0, -2), 10);
+      const sec = parseInt(s.slice(-2), 10);
+      return m + sec / 60;
+    }
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function formatMinutesForDisplay(mins) {
+    // Return mm:ss for display
+    const m = Math.floor(mins);
+    const sec = Math.round((mins - m) * 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+
+  function syncMinutesInputs(mins) {
+    const clamped = Math.max(0, Math.min(48, mins));
+    const slider = document.getElementById('pms-minutes');
+    const textInput = document.getElementById('pms-minutes-input');
+    const output = document.getElementById('pms-minutes-val');
+    if (slider) slider.value = clamped;
+    if (textInput) textInput.value = formatMinutesForDisplay(clamped);
+    if (output) output.textContent = formatMinutesForDisplay(clamped);
+    renderMinutesProjection();
+  }
+
+  function renderMinutesProjection() {
+    if (!pmsData) return;
+    const mins = parseFloat(document.getElementById('pms-minutes').value);
+    const p36 = pmsData.per36;
+    const s = pmsData.scoring;
+    const avg = pmsData.avg;
+
+    // Per-36 linear scaling: stat * (M / 36)
+    const scale = mins / 36;
+    const proj = {
+      pts: p36.pts * scale,
+      reb: p36.reb * scale,
+      ast: p36.ast * scale,
+      stl: p36.stl * scale,
+      blk: p36.blk * scale,
+      tov: p36.tov * scale,
+    };
+    const fps = s.PTS * proj.pts + s.REB * proj.reb + s.AST * proj.ast +
+      s.STL * proj.stl + s.BLK * proj.blk + s.TOV * proj.tov;
+
+    const diff = fps - pmsData.baseline_fps;
+    const pct = pmsData.avg_min > 0 ? (mins / pmsData.avg_min * 100) : 0;
+
+    const fmt = (n, d = 1) => Number.isFinite(n) ? n.toFixed(d) : '—';
+    const signed = (n, d = 1) => (n > 0 ? '+' : '') + fmt(n, d);
+
+    document.getElementById('pms-fps-val').textContent = fmt(fps, 1);
+
+    // Show baseline info with player's actual averages
+    const baselineEl = document.getElementById('pms-baseline-info');
+    if (baselineEl && pmsData.avg_min) {
+      baselineEl.style.display = 'block';
+      baselineEl.innerHTML = `Baseline at ${pmsData.avg_min} min: <strong>${fmt(pmsData.baseline_fps, 1)} FPS</strong> | ${fmt(avg.pts, 1)} PTS  ${fmt(avg.reb, 1)} REB  ${fmt(avg.ast, 1)} AST  ${fmt(avg.stl, 1)} STL  ${fmt(avg.blk, 1)} BLK  ${fmt(avg.tov, 1)} TOV`;
+    }
+
+    // Show baseline stats in light gray next to projected stats with delta
+    const breakdown = [
+      ['PTS', proj.pts, avg.pts, s.PTS],
+      ['REB', proj.reb, avg.reb, s.REB],
+      ['AST', proj.ast, avg.ast, s.AST],
+      ['STL', proj.stl, avg.stl, s.STL],
+      ['BLK', proj.blk, avg.blk, s.BLK],
+      ['TOV', proj.tov, avg.tov, s.TOV],
+    ];
+    document.getElementById('pms-breakdown').innerHTML = breakdown.map(([k, v, baseline, w]) => {
+      const contrib = v * w;
+      const cls = contrib >= 0 ? 'ms-pos' : 'ms-neg';
+      const delta = v - baseline;
+      const deltaCls = delta > 0.05 ? 'ms-pos' : (delta < -0.05 ? 'ms-neg' : '');
+      return `<div class="ms-line">
+        <span class="ms-stat">${k}</span>
+        <span class="ms-val">${fmt(v, 1)}</span>
+        <span class="ms-baseline" style="color: var(--ink-muted); font-size: 12px; min-width: 50px; text-align: right;">${fmt(baseline, 1)}</span>
+        <span class="ms-delta ${deltaCls}" style="font-size: 11px; font-weight: 600; min-width: 45px; text-align: right; margin-left: 8px;">${signed(delta, 1)}</span>
+        <span class="ms-contrib ${cls}">${signed(contrib, 1)}</span>
+      </div>`;
+    }).join('');
+
+    document.getElementById('pms-stats').innerHTML = `
+      <div class="ms-meta-row">
+        <div class="ms-stat-tile"><div class="ms-stat-val">${fmt(mins, 1)}</div><div class="ms-stat-label">Minutes</div></div>
+        <div class="ms-stat-tile"><div class="ms-stat-val">${fmt(pct, 0)}%</div><div class="ms-stat-label">vs Avg (${pmsData.avg_min})</div></div>
+        <div class="ms-stat-tile"><div class="ms-stat-val ${diff >= 0 ? 'good' : 'bad'}">${signed(diff, 1)}</div><div class="ms-stat-label">Δ vs Baseline</div></div>
+      </div>
+    `;
+
+    // Render season averages reference (static)
+    renderSeasonReference(proj, fps);
+  }
+
+  function renderSeasonReference(proj, projFps) {
+    if (!pmsData) return;
+    const avg = pmsData.avg;
+
+    const stats = [
+      { key: 'pts', label: 'PTS', weight: pmsData.scoring.PTS },
+      { key: 'reb', label: 'REB', weight: pmsData.scoring.REB },
+      { key: 'ast', label: 'AST', weight: pmsData.scoring.AST },
+      { key: 'stl', label: 'STL', weight: pmsData.scoring.STL },
+      { key: 'blk', label: 'BLK', weight: pmsData.scoring.BLK },
+      { key: 'tov', label: 'TOV', weight: pmsData.scoring.TOV },
+    ];
+
+    const fmt = (n, d = 1) => Number.isFinite(n) ? n.toFixed(d) : '—';
+    const signed = (n, d = 1) => (n > 0 ? '+' : '') + fmt(n, d);
+
+    const itemsHtml = stats.map(st => {
+      const seasonVal = avg[st.key];
+      const projVal = proj[st.key];
+      const delta = projVal - seasonVal;
+      const deltaCls = delta > 0.05 ? 'good' : (delta < -0.05 ? 'bad' : 'neutral');
+      return `<div class="ms-season-ref-item">
+        <span class="ms-season-ref-label">${st.label}</span>
+        <span class="ms-season-ref-val">${fmt(seasonVal, 1)}</span>
+        <span class="ms-season-ref-delta ${deltaCls}">${signed(delta, 1)}</span>
+      </div>`;
+    }).join('');
+
+    const fpsDelta = projFps - pmsData.baseline_fps;
+    const fpsDeltaCls = fpsDelta > 0.5 ? 'good' : (fpsDelta < -0.5 ? 'bad' : 'neutral');
+
+    document.getElementById('pms-season-ref').innerHTML = `
+      <h4>Season Averages (Reference)</h4>
+      <div class="ms-season-ref-grid">
+        ${itemsHtml}
+        <div class="ms-season-ref-item">
+          <span class="ms-season-ref-label">FPS</span>
+          <span class="ms-season-ref-val">${fmt(pmsData.baseline_fps, 1)}</span>
+          <span class="ms-season-ref-delta ${fpsDeltaCls}">${signed(fpsDelta, 1)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Event listeners for minutes slider
+  document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('pms-minutes');
+    const textInput = document.getElementById('pms-minutes-input');
+    if (slider) {
+      slider.addEventListener('input', e => {
+        const mins = parseFloat(e.target.value);
+        textInput.value = formatMinutesForDisplay(mins);
+        document.getElementById('pms-minutes-val').textContent = formatMinutesForDisplay(mins);
+        renderMinutesProjection();
+      });
+    }
+    if (textInput) {
+      textInput.addEventListener('change', e => {
+        const parsed = parseMinutesInput(e.target.value);
+        if (parsed !== null) {
+          syncMinutesInputs(parsed);
+        } else {
+          syncMinutesInputs(parseFloat(slider.value));
+        }
+      });
+    }
+  });
+
+  // ================================================================
+  // Playoff Schedule (compact - data embedded in template)
+  // ================================================================
 </script>
 {% endblock %}

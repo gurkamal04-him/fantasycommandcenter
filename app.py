@@ -7,6 +7,7 @@ import os
 import json
 import math
 import random
+import sys
 import time
 import threading
 import unicodedata
@@ -22,6 +23,51 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
+
+# =====================================================================
+# Playoff Schedule Data (Weeks 20-22)
+# =====================================================================
+PLAYOFF_SCHEDULE = {
+    'DAL': {'w20': 4, 'w21': 4, 'w22': 4, 'total': 12},
+    'PHX': {'w20': 4, 'w21': 4, 'w22': 4, 'total': 12},
+    'ATL': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'BOS': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'BKN': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'CHA': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'CHI': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'DEN': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'DET': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'GSW': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'HOU': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'IND': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'LAC': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'MEM': {'w20': 4, 'w21': 4, 'w22': 3, 'total': 11},
+    'MIL': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'NYK': {'w20': 3, 'w21': 4, 'w22': 4, 'total': 11},
+    'ORL': {'w20': 4, 'w21': 4, 'w22': 3, 'total': 11},
+    'PHI': {'w20': 4, 'w21': 4, 'w22': 3, 'total': 11},
+    'POR': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'SAC': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'SAS': {'w20': 4, 'w21': 3, 'w22': 4, 'total': 11},
+    'TOR': {'w20': 4, 'w21': 4, 'w22': 3, 'total': 11},
+    'LAL': {'w20': 4, 'w21': 3, 'w22': 3, 'total': 10},
+    'MIA': {'w20': 3, 'w21': 3, 'w22': 4, 'total': 10},
+    'MIN': {'w20': 2, 'w21': 4, 'w22': 4, 'total': 10},
+    'OKC': {'w20': 3, 'w21': 4, 'w22': 3, 'total': 10},
+    'UTA': {'w20': 3, 'w21': 4, 'w22': 3, 'total': 10},
+    'WAS': {'w20': 3, 'w21': 4, 'w22': 3, 'total': 10},
+    'CLE': {'w20': 3, 'w21': 2, 'w22': 4, 'total': 9},
+    'NOP': {'w20': 4, 'w21': 3, 'w22': 2, 'total': 9},
+}
+
+
+@app.template_global()
+def get_playoff_schedule(team_abbr):
+    """Return compact playoff schedule string for a team (e.g., '4/3/4')."""
+    team = team_abbr.upper()
+    data = PLAYOFF_SCHEDULE.get(team, {'w20': 0, 'w21': 0, 'w22': 0})
+    return f"{data['w20']}/{data['w21']}/{data['w22']}"
+
 
 # =====================================================================
 # Scoring Configuration (Points League Custom)
@@ -255,129 +301,130 @@ def get_all_teams() -> List[Dict]:
 
 _FALLBACK_PLAYERS = [
     # Superstars / Top 30
-    {'PERSON_ID': 1966, 'DISPLAY_FIRST_LAST': 'LeBron James', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 3975, 'DISPLAY_FIRST_LAST': 'Stephen Curry', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 3945274, 'DISPLAY_FIRST_LAST': 'Luka Doncic', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 3468, 'DISPLAY_FIRST_LAST': 'Giannis Antetokounmpo', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 3978, 'DISPLAY_FIRST_LAST': 'Nikola Jokic', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
-    {'PERSON_ID': 3033, 'DISPLAY_FIRST_LAST': 'Kevin Durant', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX'},
-    {'PERSON_ID': 6430, 'DISPLAY_FIRST_LAST': 'Jayson Tatum', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 6589, 'DISPLAY_FIRST_LAST': 'Trae Young', 'TEAM_ID': 27, 'TEAM_ABBREVIATION': 'WAS'},
-    {'PERSON_ID': 4278039, 'DISPLAY_FIRST_LAST': 'Anthony Edwards', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN'},
-    {'PERSON_ID': 4395651, 'DISPLAY_FIRST_LAST': 'Victor Wembanyama', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS'},
-    {'PERSON_ID': 4711294, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC'},
-    {'PERSON_ID': 4701230, 'DISPLAY_FIRST_LAST': 'Paolo Banchero', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL'},
-    {'PERSON_ID': 4433249, 'DISPLAY_FIRST_LAST': 'Franz Wagner', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL'},
-    {'PERSON_ID': 4278562, 'DISPLAY_FIRST_LAST': 'Jalen Brunson', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK'},
-    {'PERSON_ID': 4712743, 'DISPLAY_FIRST_LAST': 'Scottie Barnes', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN'},
-    {'PERSON_ID': 4432615, 'DISPLAY_FIRST_LAST': 'Tyrese Haliburton', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND'},
-    {'PERSON_ID': 4595968, 'DISPLAY_FIRST_LAST': 'Evan Mobley', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE'},
-    {'PERSON_ID': 4596317, 'DISPLAY_FIRST_LAST': 'Cade Cunningham', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET'},
-    {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA'},
-    {'PERSON_ID': 4278305, 'DISPLAY_FIRST_LAST': 'Ja Morant', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
-    {'PERSON_ID': 4432737, 'DISPLAY_FIRST_LAST': 'Zion Williamson', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP'},
-    {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA'},
-    {'PERSON_ID': 4595995, 'DISPLAY_FIRST_LAST': 'Jaren Jackson Jr.', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
-    {'PERSON_ID': 4681586, 'DISPLAY_FIRST_LAST': 'Alperen Sengun', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 4712744, 'DISPLAY_FIRST_LAST': 'Jalen Green', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 4712741, 'DISPLAY_FIRST_LAST': 'Jabari Smith Jr.', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 1628369, 'DISPLAY_FIRST_LAST': 'Devin Booker', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX'},
-    {'PERSON_ID': 1628384, 'DISPLAY_FIRST_LAST': 'Karl-Anthony Towns', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN'},
-    {'PERSON_ID': 1628415, 'DISPLAY_FIRST_LAST': 'Anthony Davis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 203076, 'DISPLAY_FIRST_LAST': 'Damian Lillard', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 202331, 'DISPLAY_FIRST_LAST': 'Paul George', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
-    {'PERSON_ID': 203083, 'DISPLAY_FIRST_LAST': 'James Harden', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
-    {'PERSON_ID': 203081, 'DISPLAY_FIRST_LAST': 'Russell Westbrook', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 202339, 'DISPLAY_FIRST_LAST': 'Kyrie Irving', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
-    {'PERSON_ID': 202684, 'DISPLAY_FIRST_LAST': 'Kawhi Leonard', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC'},
-    {'PERSON_ID': 202324, 'DISPLAY_FIRST_LAST': 'Bradley Beal', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX'},
-    {'PERSON_ID': 202322, 'DISPLAY_FIRST_LAST': 'DeMar DeRozan', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'SAC'},
-    {'PERSON_ID': 202704, 'DISPLAY_FIRST_LAST': 'Klay Thompson', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
-    {'PERSON_ID': 203460, 'DISPLAY_FIRST_LAST': 'Jimmy Butler', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA'},
-    {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA'},
-    {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA'},
-    {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE'},
-    {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE'},
-    {'PERSON_ID': 1627832, 'DISPLAY_FIRST_LAST': 'Darius Garland', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE'},
-    {'PERSON_ID': 1628387, 'DISPLAY_FIRST_LAST': 'Jaylen Brown', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 1628390, 'DISPLAY_FIRST_LAST': 'Marcus Smart', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
-    {'PERSON_ID': 1628391, 'DISPLAY_FIRST_LAST': 'Robert Williams III', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN'},
-    {'PERSON_ID': 1628399, 'DISPLAY_FIRST_LAST': 'Jrue Holiday', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 1628404, 'DISPLAY_FIRST_LAST': 'Domantas Sabonis', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC'},
-    {'PERSON_ID': 1628427, 'DISPLAY_FIRST_LAST': 'Dejounte Murray', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA'},
-    {'PERSON_ID': 1628449, 'DISPLAY_FIRST_LAST': 'Myles Turner', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND'},
-    {'PERSON_ID': 1628464, 'DISPLAY_FIRST_LAST': 'Julius Randle', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK'},
-    {'PERSON_ID': 1628475, 'DISPLAY_FIRST_LAST': 'Pascal Siakam', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND'},
-    {'PERSON_ID': 1628484, 'DISPLAY_FIRST_LAST': 'OG Anunoby', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK'},
-    {'PERSON_ID': 1628494, 'DISPLAY_FIRST_LAST': 'Mikal Bridges', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK'},
-    {'PERSON_ID': 1628500, 'DISPLAY_FIRST_LAST': 'Tyrese Maxey', 'TEAM_ID': 20, 'TEAM_ABBREVIATION': 'PHI'},
-    {'PERSON_ID': 1628511, 'DISPLAY_FIRST_LAST': 'Jalen Suggs', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL'},
-    {'PERSON_ID': 1628522, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC'},
-    {'PERSON_ID': 1628531, 'DISPLAY_FIRST_LAST': 'Jalen Williams', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC'},
-    {'PERSON_ID': 1628542, 'DISPLAY_FIRST_LAST': 'Walker Kessler', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA'},
-    {'PERSON_ID': 1628553, 'DISPLAY_FIRST_LAST': 'Bennedict Mathurin', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND'},
-    {'PERSON_ID': 1628564, 'DISPLAY_FIRST_LAST': 'Keegan Murray', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC'},
-    {'PERSON_ID': 1628575, 'DISPLAY_FIRST_LAST': 'Jalen Duren', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET'},
-    {'PERSON_ID': 1628586, 'DISPLAY_FIRST_LAST': 'Tari Eason', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 1628597, 'DISPLAY_FIRST_LAST': 'Jabari Smith Jr.', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 1628608, 'DISPLAY_FIRST_LAST': 'Jeremy Sochan', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS'},
-    {'PERSON_ID': 1628619, 'DISPLAY_FIRST_LAST': 'Jaden Ivey', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET'},
-    {'PERSON_ID': 1628630, 'DISPLAY_FIRST_LAST': 'AJ Griffin', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN'},
-    {'PERSON_ID': 1628641, 'DISPLAY_FIRST_LAST': 'Mark Williams', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA'},
-    {'PERSON_ID': 1628652, 'DISPLAY_FIRST_LAST': 'Blake Wesley', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS'},
-    {'PERSON_ID': 1628663, 'DISPLAY_FIRST_LAST': 'Dalen Terry', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI'},
-    {'PERSON_ID': 1628674, 'DISPLAY_FIRST_LAST': 'Johnny Davis', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR'},
-    {'PERSON_ID': 1628685, 'DISPLAY_FIRST_LAST': 'MarJon Beauchamp', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 1628696, 'DISPLAY_FIRST_LAST': 'Kennedy Chandler', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
-    {'PERSON_ID': 1628707, 'DISPLAY_FIRST_LAST': 'Guillermo Diaz-Graham', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN'},
-    {'PERSON_ID': 1628718, 'DISPLAY_FIRST_LAST': 'Jalen Wilson', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN'},
-    {'PERSON_ID': 1628729, 'DISPLAY_FIRST_LAST': 'Dereck Lively II', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
-    {'PERSON_ID': 1628740, 'DISPLAY_FIRST_LAST': 'Keyonte George', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA'},
-    {'PERSON_ID': 1628751, 'DISPLAY_FIRST_LAST': 'Cason Wallace', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC'},
-    {'PERSON_ID': 1628762, 'DISPLAY_FIRST_LAST': 'Amen Thompson', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU'},
-    {'PERSON_ID': 1628773, 'DISPLAY_FIRST_LAST': 'Ausar Thompson', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET'},
-    {'PERSON_ID': 1628784, 'DISPLAY_FIRST_LAST': 'Brandon Miller', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA'},
-    {'PERSON_ID': 1628795, 'DISPLAY_FIRST_LAST': 'Scoot Henderson', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR'},
-    {'PERSON_ID': 1628806, 'DISPLAY_FIRST_LAST': 'Victor Wembanyama', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS'},
-    {'PERSON_ID': 1628817, 'DISPLAY_FIRST_LAST': 'Jarace Walker', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND'},
-    {'PERSON_ID': 1628828, 'DISPLAY_FIRST_LAST': 'Taylor Hendricks', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA'},
-    {'PERSON_ID': 1628839, 'DISPLAY_FIRST_LAST': 'Nick Smith Jr.', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA'},
-    {'PERSON_ID': 1628850, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
-    {'PERSON_ID': 1628861, 'DISPLAY_FIRST_LAST': 'GG Jackson', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM'},
-    {'PERSON_ID': 1628872, 'DISPLAY_FIRST_LAST': 'Jordan Hawkins', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP'},
-    {'PERSON_ID': 203110, 'DISPLAY_FIRST_LAST': 'Draymond Green', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 1628883, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 1628894, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 1629636, 'DISPLAY_FIRST_LAST': 'Coby White', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI'},
-    {'PERSON_ID': 1628905, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 1628916, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
-    {'PERSON_ID': 1628927, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
-    {'PERSON_ID': 1628938, 'DISPLAY_FIRST_LAST': 'Jett Howard', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL'},
-    {'PERSON_ID': 1628949, 'DISPLAY_FIRST_LAST': 'Kris Murray', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR'},
-    {'PERSON_ID': 1628960, 'DISPLAY_FIRST_LAST': 'Raymond Felton Jr.', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI'},
-    {'PERSON_ID': 1628971, 'DISPLAY_FIRST_LAST': 'Chris Livingston', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 1628982, 'DISPLAY_FIRST_LAST': 'Andre Jackson Jr.', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 1628993, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 1629004, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
-    {'PERSON_ID': 1629015, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
-    {'PERSON_ID': 1629026, 'DISPLAY_FIRST_LAST': 'Keyonte George', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA'},
-    {'PERSON_ID': 1629037, 'DISPLAY_FIRST_LAST': 'Brice Sensabaugh', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA'},
-    {'PERSON_ID': 1629048, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 1629059, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW'},
-    {'PERSON_ID': 1629070, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
-    {'PERSON_ID': 1629081, 'DISPLAY_FIRST_LAST': 'Jalen Hood-Schifino', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 1629092, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL'},
-    {'PERSON_ID': 1629103, 'DISPLAY_FIRST_LAST': 'Colby Jones', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC'},
-    {'PERSON_ID': 1629114, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
-    {'PERSON_ID': 1629125, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN'},
-    {'PERSON_ID': 1629136, 'DISPLAY_FIRST_LAST': 'Jett Howard', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL'},
-    {'PERSON_ID': 1629147, 'DISPLAY_FIRST_LAST': 'Kris Murray', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR'},
-    {'PERSON_ID': 1629158, 'DISPLAY_FIRST_LAST': 'Raymond Felton Jr.', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI'},
-    {'PERSON_ID': 1629169, 'DISPLAY_FIRST_LAST': 'Chris Livingston', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 1629180, 'DISPLAY_FIRST_LAST': 'Andre Jackson Jr.', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL'},
-    {'PERSON_ID': 1629191, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS'},
-    {'PERSON_ID': 1629202, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL'},
-    {'PERSON_ID': 1629213, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL'},
+    {'PERSON_ID': 1966, 'DISPLAY_FIRST_LAST': 'LeBron James', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'SF'},
+    {'PERSON_ID': 3975, 'DISPLAY_FIRST_LAST': 'Stephen Curry', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'PG'},
+    {'PERSON_ID': 3945274, 'DISPLAY_FIRST_LAST': 'Luka Doncic', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'PG'},
+    {'PERSON_ID': 3468, 'DISPLAY_FIRST_LAST': 'Giannis Antetokounmpo', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'PF'},
+    {'PERSON_ID': 3978, 'DISPLAY_FIRST_LAST': 'Nikola Jokic', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'C'},
+    {'PERSON_ID': 3033, 'DISPLAY_FIRST_LAST': 'Kevin Durant', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX', 'POSITION': 'SF'},
+    {'PERSON_ID': 6430, 'DISPLAY_FIRST_LAST': 'Jayson Tatum', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
+    {'PERSON_ID': 6589, 'DISPLAY_FIRST_LAST': 'Trae Young', 'TEAM_ID': 27, 'TEAM_ABBREVIATION': 'WAS', 'POSITION': 'PG'},
+    {'PERSON_ID': 4278039, 'DISPLAY_FIRST_LAST': 'Anthony Edwards', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN', 'POSITION': 'SG'},
+    {'PERSON_ID': 4395651, 'DISPLAY_FIRST_LAST': 'Victor Wembanyama', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS', 'POSITION': 'C'},
+    {'PERSON_ID': 1628368, 'DISPLAY_FIRST_LAST': 'Shai Gilgeous-Alexander', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'PG'},
+    {'PERSON_ID': 4876123, 'DISPLAY_FIRST_LAST': 'Dylan Harper', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS', 'POSITION': 'PG'},
+    {'PERSON_ID': 4711294, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'C'},
+    {'PERSON_ID': 4701230, 'DISPLAY_FIRST_LAST': 'Paolo Banchero', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'PF'},
+    {'PERSON_ID': 4433249, 'DISPLAY_FIRST_LAST': 'Franz Wagner', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'SF'},
+    {'PERSON_ID': 4278562, 'DISPLAY_FIRST_LAST': 'Jalen Brunson', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'PG'},
+    {'PERSON_ID': 4712743, 'DISPLAY_FIRST_LAST': 'Scottie Barnes', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'PF'},
+    {'PERSON_ID': 4432615, 'DISPLAY_FIRST_LAST': 'Tyrese Haliburton', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PG'},
+    {'PERSON_ID': 4595968, 'DISPLAY_FIRST_LAST': 'Evan Mobley', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'C'},
+    {'PERSON_ID': 4596317, 'DISPLAY_FIRST_LAST': 'Cade Cunningham', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'PG'},
+    {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'PG'},
+    {'PERSON_ID': 4278305, 'DISPLAY_FIRST_LAST': 'Ja Morant', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'PG'},
+    {'PERSON_ID': 4432737, 'DISPLAY_FIRST_LAST': 'Zion Williamson', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP', 'POSITION': 'PF'},
+    {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'PG'},
+    {'PERSON_ID': 4595995, 'DISPLAY_FIRST_LAST': 'Jaren Jackson Jr.', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'C'},
+    {'PERSON_ID': 4681586, 'DISPLAY_FIRST_LAST': 'Alperen Sengun', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'C'},
+    {'PERSON_ID': 4712744, 'DISPLAY_FIRST_LAST': 'Jalen Green', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'SG'},
+    {'PERSON_ID': 4712741, 'DISPLAY_FIRST_LAST': 'Jabari Smith Jr.', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628369, 'DISPLAY_FIRST_LAST': 'Devin Booker', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628384, 'DISPLAY_FIRST_LAST': 'Karl-Anthony Towns', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN', 'POSITION': 'C'},
+    {'PERSON_ID': 1628415, 'DISPLAY_FIRST_LAST': 'Anthony Davis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'C'},
+    {'PERSON_ID': 203076, 'DISPLAY_FIRST_LAST': 'Damian Lillard', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'PG'},
+    {'PERSON_ID': 202331, 'DISPLAY_FIRST_LAST': 'Paul George', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC', 'POSITION': 'SF'},
+    {'PERSON_ID': 203083, 'DISPLAY_FIRST_LAST': 'James Harden', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC', 'POSITION': 'PG'},
+    {'PERSON_ID': 203081, 'DISPLAY_FIRST_LAST': 'Russell Westbrook', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'PG'},
+    {'PERSON_ID': 202339, 'DISPLAY_FIRST_LAST': 'Kyrie Irving', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'PG'},
+    {'PERSON_ID': 202684, 'DISPLAY_FIRST_LAST': 'Kawhi Leonard', 'TEAM_ID': 12, 'TEAM_ABBREVIATION': 'LAC', 'POSITION': 'SF'},
+    {'PERSON_ID': 202324, 'DISPLAY_FIRST_LAST': 'Bradley Beal', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX', 'POSITION': 'SG'},
+    {'PERSON_ID': 202322, 'DISPLAY_FIRST_LAST': 'DeMar DeRozan', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'SG'},
+    {'PERSON_ID': 202704, 'DISPLAY_FIRST_LAST': 'Klay Thompson', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SG'},
+    {'PERSON_ID': 203460, 'DISPLAY_FIRST_LAST': 'Jimmy Butler', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'SF'},
+    {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'C'},
+    {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'C'},
+    {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'SG'},
+    {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'SG'},
+    {'PERSON_ID': 1627832, 'DISPLAY_FIRST_LAST': 'Darius Garland', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628387, 'DISPLAY_FIRST_LAST': 'Jaylen Brown', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628390, 'DISPLAY_FIRST_LAST': 'Marcus Smart', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628391, 'DISPLAY_FIRST_LAST': 'Robert Williams III', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN', 'POSITION': 'C'},
+    {'PERSON_ID': 1628399, 'DISPLAY_FIRST_LAST': 'Jrue Holiday', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628404, 'DISPLAY_FIRST_LAST': 'Domantas Sabonis', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'C'},
+    {'PERSON_ID': 1628427, 'DISPLAY_FIRST_LAST': 'Dejounte Murray', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628449, 'DISPLAY_FIRST_LAST': 'Myles Turner', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'C'},
+    {'PERSON_ID': 1628464, 'DISPLAY_FIRST_LAST': 'Julius Randle', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628475, 'DISPLAY_FIRST_LAST': 'Pascal Siakam', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628484, 'DISPLAY_FIRST_LAST': 'OG Anunoby', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628494, 'DISPLAY_FIRST_LAST': 'Mikal Bridges', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628500, 'DISPLAY_FIRST_LAST': 'Tyrese Maxey', 'TEAM_ID': 20, 'TEAM_ABBREVIATION': 'PHI', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628511, 'DISPLAY_FIRST_LAST': 'Jalen Suggs', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628522, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'C'},
+    {'PERSON_ID': 1628531, 'DISPLAY_FIRST_LAST': 'Jalen Williams', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628542, 'DISPLAY_FIRST_LAST': 'Walker Kessler', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'C'},
+    {'PERSON_ID': 1628553, 'DISPLAY_FIRST_LAST': 'Bennedict Mathurin', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628564, 'DISPLAY_FIRST_LAST': 'Keegan Murray', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628575, 'DISPLAY_FIRST_LAST': 'Jalen Duren', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'C'},
+    {'PERSON_ID': 1628586, 'DISPLAY_FIRST_LAST': 'Tari Eason', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628597, 'DISPLAY_FIRST_LAST': 'Jabari Smith Jr.', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628608, 'DISPLAY_FIRST_LAST': 'Jeremy Sochan', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628619, 'DISPLAY_FIRST_LAST': 'Jaden Ivey', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628630, 'DISPLAY_FIRST_LAST': 'AJ Griffin', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628641, 'DISPLAY_FIRST_LAST': 'Mark Williams', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'C'},
+    {'PERSON_ID': 1628652, 'DISPLAY_FIRST_LAST': 'Blake Wesley', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628663, 'DISPLAY_FIRST_LAST': 'Dalen Terry', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628674, 'DISPLAY_FIRST_LAST': 'Johnny Davis', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628685, 'DISPLAY_FIRST_LAST': 'MarJon Beauchamp', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628696, 'DISPLAY_FIRST_LAST': 'Kennedy Chandler', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628707, 'DISPLAY_FIRST_LAST': 'Guillermo Diaz-Graham', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'C'},
+    {'PERSON_ID': 1628718, 'DISPLAY_FIRST_LAST': 'Jalen Wilson', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628729, 'DISPLAY_FIRST_LAST': 'Dereck Lively II', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'C'},
+    {'PERSON_ID': 1628740, 'DISPLAY_FIRST_LAST': 'Keyonte George', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628751, 'DISPLAY_FIRST_LAST': 'Cason Wallace', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628762, 'DISPLAY_FIRST_LAST': 'Amen Thompson', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628773, 'DISPLAY_FIRST_LAST': 'Ausar Thompson', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628784, 'DISPLAY_FIRST_LAST': 'Brandon Miller', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628795, 'DISPLAY_FIRST_LAST': 'Scoot Henderson', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'PG'},
+        {'PERSON_ID': 1628817, 'DISPLAY_FIRST_LAST': 'Jarace Walker', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628828, 'DISPLAY_FIRST_LAST': 'Taylor Hendricks', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628839, 'DISPLAY_FIRST_LAST': 'Nick Smith Jr.', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628850, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628861, 'DISPLAY_FIRST_LAST': 'GG Jackson', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628872, 'DISPLAY_FIRST_LAST': 'Jordan Hawkins', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP', 'POSITION': 'SG'},
+    {'PERSON_ID': 203110, 'DISPLAY_FIRST_LAST': 'Draymond Green', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628883, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628894, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'PF'},
+    {'PERSON_ID': 1629636, 'DISPLAY_FIRST_LAST': 'Coby White', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628905, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628916, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SG'},
+    {'PERSON_ID': 1628927, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628938, 'DISPLAY_FIRST_LAST': 'Jett Howard', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628949, 'DISPLAY_FIRST_LAST': 'Kris Murray', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628960, 'DISPLAY_FIRST_LAST': 'Raymond Felton Jr.', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628971, 'DISPLAY_FIRST_LAST': 'Chris Livingston', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628982, 'DISPLAY_FIRST_LAST': 'Andre Jackson Jr.', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1628993, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629004, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629015, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629026, 'DISPLAY_FIRST_LAST': 'Keyonte George', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'PG'},
+    {'PERSON_ID': 1629037, 'DISPLAY_FIRST_LAST': 'Brice Sensabaugh', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629048, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'SG'},
+    {'PERSON_ID': 1629059, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'PF'},
+    {'PERSON_ID': 1629070, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SG'},
+    {'PERSON_ID': 1629081, 'DISPLAY_FIRST_LAST': 'Jalen Hood-Schifino', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'PG'},
+    {'PERSON_ID': 1629092, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629103, 'DISPLAY_FIRST_LAST': 'Colby Jones', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'SG'},
+    {'PERSON_ID': 1629114, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SG'},
+    {'PERSON_ID': 1629125, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629136, 'DISPLAY_FIRST_LAST': 'Jett Howard', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629147, 'DISPLAY_FIRST_LAST': 'Kris Murray', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'PF'},
+    {'PERSON_ID': 1629158, 'DISPLAY_FIRST_LAST': 'Raymond Felton Jr.', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI', 'POSITION': 'PG'},
+    {'PERSON_ID': 1629169, 'DISPLAY_FIRST_LAST': 'Chris Livingston', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629180, 'DISPLAY_FIRST_LAST': 'Andre Jackson Jr.', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629191, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629202, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SF'},
+    {'PERSON_ID': 1629213, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SF'},
 ]
 
 # Some fallback players are keyed by a curated PERSON_ID that differs from the
@@ -393,7 +440,7 @@ _FALLBACK_ESPN_ID_MAP = {
     3975: 3975,        # Stephen Curry
     1966: 1966,        # LeBron James
     3945274: 3945274,  # Luka Doncic
-    4278039: 4278039,  # Anthony Edwards
+    4278039: 4594268,  # Anthony Edwards (NBA.com 4278039 -> ESPN 4594268)
     4395651: 5104157,  # Victor Wembanyama (NBA.com 4395651 -> ESPN 5104157)
     4711294: 4711294,  # Chet Holmgren
     4701230: 4701230,  # Paolo Banchero
@@ -406,11 +453,11 @@ _FALLBACK_ESPN_ID_MAP = {
     4278305: 4278305,  # Ja Morant
     4432737: 4432737,  # Zion Williamson
     4595995: 4595995,  # Jaren Jackson Jr.
-    4681586: 4681586,  # Alperen Sengun
+    4681586: 4871144,  # Alperen Sengun
     4712744: 4712744,  # Jalen Green
     4712741: 4712741,  # Jabari Smith Jr.
-    1628369: 1628369,  # Devin Booker
-    1628384: 1628384,  # Karl-Anthony Towns
+    1628369: 3136193,  # Devin Booker (NBA.com 1628369 -> ESPN 3136193)
+    1628384: 3136195,  # Karl-Anthony Towns (NBA.com 1628384 -> ESPN 3136195)
     1628415: 1628415,  # Anthony Davis
     203076: 203076,    # Damian Lillard
     202331: 202331,    # Paul George (NBA.com ID)
@@ -464,8 +511,7 @@ _FALLBACK_ESPN_ID_MAP = {
     1628773: 1628773,  # Ausar Thompson
     1628784: 1628784,  # Brandon Miller
     1628795: 1628795,  # Scoot Henderson
-    1628806: 1628806,  # Victor Wembanyama (duplicate ID)
-    1628817: 1628817,  # Jarace Walker
+        1628817: 1628817,  # Jarace Walker
     1628828: 1628828,  # Taylor Hendricks
     1628839: 1628839,  # Nick Smith Jr.
     1628850: 1628850,  # Kobe Bufkin
@@ -505,6 +551,8 @@ _FALLBACK_ESPN_ID_MAP = {
     # Additional players whose ESPN box score IDs differ from NBA.com PERSON_IDs
     203110: 6589,      # Draymond Green (NBA.com 203110 -> ESPN 6589)
     1629636: 4395651,  # Coby White (NBA.com 1629636 -> ESPN 4395651)
+    1628368: 4278073,  # Shai Gilgeous-Alexander (NBA.com 1628368 -> ESPN 4278073)
+    4876123: 5037871,  # Dylan Harper (NBA.com 4876123 -> ESPN 5037871)
 }
 
 # Reverse map: ESPN athlete ID -> curated PERSON_ID
@@ -623,6 +671,7 @@ def get_all_players() -> List[Dict]:
                 'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
                 'TEAM_ID': fb['TEAM_ID'],
                 'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
+                'POSITION': fb.get('POSITION', ''),
             }
         elif name in fallback_names:
             # Match by name as fallback - use fallback's PERSON_ID as canonical key
@@ -632,6 +681,7 @@ def get_all_players() -> List[Dict]:
                 'DISPLAY_FIRST_LAST': fb['DISPLAY_FIRST_LAST'],
                 'TEAM_ID': fb['TEAM_ID'],
                 'TEAM_ABBREVIATION': fb['TEAM_ABBREVIATION'],
+                'POSITION': fb.get('POSITION', ''),
             }
         else:
             # Not in fallback, use ESPN data with canonical abbreviation
@@ -734,7 +784,11 @@ def get_player_gamelog(player_id: int, season: str = '2026-27', n_games: int = 5
             return _mock_player_gamelog(player_id, n_games)
 
         # Filter to completed games only
-        completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
+        if 'completed' in schedule_df.columns:
+            completed = schedule_df[schedule_df['completed'] == True]
+        else:
+            # Fallback for old data without 'completed' column
+            completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
         if completed.empty:
             print(f"No completed games for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
@@ -847,7 +901,11 @@ def get_player_gamelog_parallel(player_id: int, season: str = '2026-27', n_games
             return _mock_player_gamelog(player_id, n_games)
 
         # Filter to completed games only
-        completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
+        if 'completed' in schedule_df.columns:
+            completed = schedule_df[schedule_df['completed'] == True]
+        else:
+            # Fallback for old data without 'completed' column
+            completed = schedule_df[schedule_df['status'].str.contains('FINAL', na=False, case=False)]
         if completed.empty:
             print(f"No completed games for season {season} — using mock game log")
             return _mock_player_gamelog(player_id, n_games)
@@ -1512,6 +1570,33 @@ def get_espn_box_score(game_id: str) -> Dict[str, Any]:
             return {'players': [], 'source': 'espn', 'error': str(e)}
 
 
+def _get_espn_box_score_retry(game_id: str) -> Dict[str, Any]:
+    """Call get_espn_box_score with retry on transient 403/429.
+
+    ESPN intermittently rate-limits box score requests. Retrying a couple of
+    times with a short backoff turns a hard failure into a recoverable one.
+
+    Note: get_espn_box_score is lru_cached, so a 403 must raise (not
+    return an empty result) or the failure gets cached and retries are no-ops.
+    """
+    for attempt in range(3):
+        try:
+            result = get_espn_box_score(game_id)
+            if result.get('players'):
+                return result
+            # Empty result may be a transient 403 — retry before giving up.
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            return result
+        except Exception:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            raise
+    return {'players': [], 'source': 'espn', 'error': 'Max retries exceeded'}
+
+
 def get_box_score_cached(game_id: str) -> Dict[str, Any]:
     """Wrapper around get_espn_box_score that uses the shared _BOX_SCORE_CACHE.
 
@@ -1529,7 +1614,7 @@ def get_box_score_cached(game_id: str) -> Dict[str, Any]:
             del _BOX_SCORE_CACHE[oldest_key]
 
     # Fetch outside the lock to avoid blocking other cache lookups
-    result = get_espn_box_score(game_id)
+    result = _get_espn_box_score_retry(game_id)
 
     # Only cache successful results (not empty/error results from 403)
     if result.get('players'):
@@ -1624,7 +1709,9 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
             except (ValueError, TypeError):
                 continue
 
+            # Get status from competition (not event - event.status is empty)
             status = comp.get('status', {}).get('type', {}).get('description', '')
+            completed = comp.get('status', {}).get('type', {}).get('completed', False)
 
             def _score(comp):
                 s = comp.get('score')
@@ -1642,6 +1729,7 @@ def get_espn_team_schedule(team_id: int, season: str = '2026-27') -> pd.DataFram
                 'homeTeam_score': _score(home_comp),
                 'awayTeam_score': _score(away_comp),
                 'status': status,
+                'completed': completed,
             })
 
         return pd.DataFrame(rows)
@@ -1999,7 +2087,7 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
         for p in all_players:
             team_id = p.get('TEAM_ID')
             if team_id and team_id not in team_schedules:
-                team_schedules[team_id] = get_espn_team_schedule(team_id, season)
+                team_schedules[team_id] = _get_espn_team_schedule_retry(team_id, season)
 
         # Collect all unique completed game IDs with their dates
         # Map: game_id -> game_date
@@ -2027,8 +2115,10 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             box = get_box_score_cached(gid)
             out = []
             seen_ids = set()
-            for player in box.get('players', []):
-                pid = player.get('playerId')
+            # The cached box score has already-parsed players in a flat list
+            # Each player has: playerId (ESPN ID), playerName, teamAbbrev, and parsed stats
+            for p in box.get('players', []):
+                pid = p.get('playerId')
                 if pid is None:
                     continue
                 pid = int(pid)
@@ -2039,8 +2129,31 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
                 seen_ids.add(pid)
                 # Map ESPN athlete ID to our curated PERSON_ID for consistent lookups
                 curated_id = _ESPN_TO_CURATED_ID_MAP.get(pid, pid)
-                pdata = dict(player)
-                pdata['gameDate'] = gdate
+                # Use the already-parsed stats from the cached box score
+                # p has keys like: minutes, points, rebounds, assists, steals, blocks, turnovers, etc.
+                stat_dict = {
+                    'MIN': p.get('minutes', 0),
+                    'PTS': p.get('points', 0),
+                    'REB': p.get('rebounds', 0),
+                    'AST': p.get('assists', 0),
+                    'STL': p.get('steals', 0),
+                    'BLK': p.get('blocks', 0),
+                    'TO': p.get('turnovers', 0),
+                    'FGM': p.get('fieldGoalsMade', 0),
+                    'FGA': p.get('fieldGoalsAttempted', 0),
+                    'FG3M': p.get('threePointFieldGoalsMade', 0),
+                    'FG3A': p.get('threePointFieldGoalsAttempted', 0),
+                    'FTM': p.get('freeThrowsMade', 0),
+                    'FTA': p.get('freeThrowsAttempted', 0),
+                }
+                pdata = {
+                    'playerId': curated_id,
+                    'espn_id': pid,
+                    'gameDate': gdate,
+                    'team': {'abbreviation': p.get('teamAbbrev', '')},
+                    'stats': stat_dict,
+                    'displayName': p.get('playerName', ''),
+                }
                 out.append((curated_id, pdata))
             return out
 
@@ -2069,22 +2182,23 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             # Convert to DataFrame rows
             rows = []
             for g in games:
+                stats = g.get('stats', {})
                 row = {
                     'PERSON_ID': player_id,
                     'GAME_DATE': g.get('gameDate', ''),
-                    'MIN': g.get('minutes', 0),
-                    'PTS': g.get('points', 0),
-                    'REB': g.get('rebounds', 0),
-                    'AST': g.get('assists', 0),
-                    'STL': g.get('steals', 0),
-                    'BLK': g.get('blocks', 0),
-                    'TOV': g.get('turnovers', 0),
-                    'FGM': g.get('fieldGoalsMade', 0),
-                    'FGA': g.get('fieldGoalsAttempted', 0),
-                    'FG3M': g.get('threePointFieldGoalsMade', 0),
-                    'FG3A': g.get('threePointFieldGoalsAttempted', 0),
-                    'FTM': g.get('freeThrowsMade', 0),
-                    'FTA': g.get('freeThrowsAttempted', 0),
+                    'MIN': stats.get('MIN', 0),
+                    'PTS': stats.get('PTS', 0),
+                    'REB': stats.get('REB', 0),
+                    'AST': stats.get('AST', 0),
+                    'STL': stats.get('STL', 0),
+                    'BLK': stats.get('BLK', 0),
+                    'TOV': stats.get('TO', 0),
+                    'FGM': stats.get('FGM', 0),
+                    'FGA': stats.get('FGA', 0),
+                    'FG3M': stats.get('FG3M', 0),
+                    'FG3A': stats.get('FG3A', 0),
+                    'FTM': stats.get('FTM', 0),
+                    'FTA': stats.get('FTA', 0),
                 }
                 rows.append(row)
 
@@ -2187,10 +2301,6 @@ def player_rankings():
 
     key = _rk_key(period, season, start_date, end_date)
 
-    # Clear cached ESPN responses so a transient 403/rate-limit that produced
-    # an empty result doesn't poison the lookup for the rest of the session.
-    _clear_espn_caches()
-
     # Kick off a background warm if nothing is cached yet. The endpoint never
     # blocks on the cold computation — it returns the cached result or a
     # "warming" status so the frontend can poll.
@@ -2259,6 +2369,7 @@ def index():
 @app.route('/player/<int:player_id>')
 def player_profile_page(player_id):
     """Render player profile page"""
+    _clear_espn_caches()
     all_players = get_all_players()
     player = next((p for p in all_players if p.get('PERSON_ID') == player_id), None)
     if not player:
@@ -2670,9 +2781,17 @@ def league_team_stats():
 @app.route('/api/player/<int:player_id>')
 def player_profile(player_id):
     """Get comprehensive player profile: personal info, career stats, team info"""
+    # Clear ESPN caches to ensure latest fallback data is used
+    _clear_espn_caches()
     # Find player in our player list
     all_players = get_all_players()
+    print(f"DEBUG API: Found {len(all_players)} players", file=sys.stderr)
+    for p in all_players:
+        if p.get('PERSON_ID') == player_id:
+            print(f"DEBUG API: Found player in all_players: {p}", file=sys.stderr)
+            break
     player = next((p for p in all_players if p.get('PERSON_ID') == player_id), None)
+    print(f"DEBUG API: Player found: {player}", file=sys.stderr)
     if not player:
         return jsonify({'error': 'Player not found'}), 404
 
@@ -4063,7 +4182,12 @@ def player_minutes_projection(player_id):
         projected_stat(M) = per36_stat * (M / 36)
         projected_fps(M) = sum(projected_stat(M) * SCORING[stat])
     """
-    df = get_player_gamelog(player_id, n_games=30)
+    # Use parallel fetcher with team_id for better performance
+    team_id = None
+    fallback = next((p for p in _FALLBACK_PLAYERS if p['PERSON_ID'] == player_id), None)
+    if fallback:
+        team_id = fallback.get('TEAM_ID')
+    df = get_player_gamelog_parallel(player_id, n_games=30, team_id=team_id)
     if df.empty:
         return jsonify({'error': 'No data'}), 404
 
