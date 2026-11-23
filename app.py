@@ -1871,6 +1871,7 @@ def get_box_score(game_id: str) -> Dict[str, pd.DataFrame]:
                 'teamTricode': p.get('teamAbbrev', ''),
                 'firstName': first_name,
                 'familyName': family_name,
+                'position': p.get('position', ''),
                 'minutes': p.get('minutes', 0),
                 'points': p.get('points', 0),
                 'reboundsTotal': p.get('rebounds', 0),
@@ -3321,6 +3322,7 @@ def box_score(game_id):
             'player_id': row.get('personId', row.get('playerId', '')),
             'name': f"{row.get('firstName', '')} {row.get('familyName', row.get('lastName', ''))}".strip(),
             'team': row.get('teamTricode', row.get('TEAM_ABBREVIATION', '')),
+            'position': row.get('position', ''),
             'starter': row.get('comment', '').upper() == 'STARTER' or row.get('START_POSITION', '') != '',
             'min': row.get('minutes', row.get('MIN', 0)),
             'pts': row.get('points', row.get('PTS', 0)),
@@ -3535,6 +3537,77 @@ def scoreboard():
         'date': date_str,
         'games': []
     })
+
+
+@app.route('/api/today-out-players')
+def today_out_players():
+    """Get players listed as 'Out' for today's games from ESPN summary endpoints."""
+    date_str = request.args.get('date', get_effective_date_pct())
+    game_id_filter = request.args.get('game_id')
+    espn_date = date_str.replace('-', '')
+
+    # First get the scoreboard to find today's games
+    try:
+        import requests
+        scoreboard_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
+        resp = requests.get(scoreboard_url, headers=ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        scoreboard_data = resp.json()
+    except Exception as e:
+        print(f"Error fetching scoreboard for out players: {e}")
+        return jsonify({'date': date_str, 'out_players': [], 'error': str(e)})
+
+    # Get game IDs from today's games
+    game_ids = []
+    for event in scoreboard_data.get('events', []):
+        game_ids.append(event.get('id'))
+
+    # If a specific game_id is requested, only fetch that one
+    if game_id_filter:
+        game_ids = [game_id_filter] if game_id_filter in game_ids else []
+
+    if not game_ids:
+        return jsonify({'date': date_str, 'out_players': []})
+
+    # For each game, fetch the summary to get injury/out players
+    all_out_players = []
+    seen_player_ids = set()
+
+    for game_id in game_ids:
+        try:
+            summary_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={game_id}"
+            resp = requests.get(summary_url, headers=ESPN_HEADERS, timeout=10)
+            resp.raise_for_status()
+            summary_data = resp.json()
+
+            # Extract injuries with status "Out"
+            for injury_group in summary_data.get('injuries', []):
+                team_abbr = injury_group.get('team', {}).get('abbreviation', '')
+                for injury in injury_group.get('injuries', []):
+                    if injury.get('type', {}).get('description', '').lower() == 'out':
+                        athlete = injury.get('athlete', {})
+                        player_id = athlete.get('id')
+                        if player_id and player_id not in seen_player_ids:
+                            seen_player_ids.add(player_id)
+                            all_out_players.append({
+                                'player_id': player_id,
+                                'name': athlete.get('displayName', ''),
+                                'first_name': athlete.get('firstName', ''),
+                                'last_name': athlete.get('lastName', ''),
+                                'team': team_abbr,
+                                'position': athlete.get('position', {}).get('abbreviation', ''),
+                                'jersey': athlete.get('jersey', ''),
+                                'injury_detail': injury.get('details', {}).get('detail', ''),
+                                'injury_type': injury.get('details', {}).get('type', ''),
+                                'return_date': injury.get('details', {}).get('returnDate', ''),
+                                'fantasy_status': injury.get('details', {}).get('fantasyStatus', {}).get('abbreviation', ''),
+                                'game_id': game_id,
+                            })
+        except Exception as e:
+            print(f"Error fetching summary for game {game_id}: {e}")
+            continue
+
+    return jsonify({'date': date_str, 'out_players': all_out_players})
 
 
 @app.route('/api/start-sit', methods=['POST'])

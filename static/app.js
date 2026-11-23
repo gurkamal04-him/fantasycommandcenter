@@ -373,6 +373,26 @@
   function renderScoreboard(games) {
     const el = $('#scoreboard-games');
     if (!games.length) { el.innerHTML = '<div class="empty">No games scheduled</div>'; return; }
+
+    // Fetch out players for all games
+    const gameIds = games.map(g => g.gameId).filter(Boolean);
+    let outPlayersByGame = {};
+
+    if (gameIds.length > 0) {
+      // We'll fetch out players asynchronously and update the DOM
+      fetchOutPlayersForGames(gameIds).then(data => {
+        outPlayersByGame = data;
+        // Re-render with out players
+        updateScoreboardWithOutPlayers(games, outPlayersByGame);
+      }).catch(e => console.error('Failed to load out players', e));
+    }
+
+    // Initial render without out players
+    updateScoreboardWithOutPlayers(games, {});
+  }
+
+  function updateScoreboardWithOutPlayers(games, outPlayersByGame) {
+    const el = $('#scoreboard-games');
     el.innerHTML = games.map(g => {
       const home = g.home || {};
       const away = g.away || {};
@@ -387,11 +407,28 @@
           dateDisplay = d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles'});
         }
       }
+
+      const homeOut = outPlayersByGame[g.gameId]?.home || [];
+      const awayOut = outPlayersByGame[g.gameId]?.away || [];
+
+      const homeOutHtml = homeOut.length ? `
+        <div class="sb-out-players" style="margin-top:4px;">
+          <div class="sb-out-label" style="font-size:10px;color:var(--bad);font-weight:600;">OUT: ${homeOut.map(p => `${p.name} (${p.injury_type || 'Out'})`).join(', ')}</div>
+        </div>
+      ` : '';
+
+      const awayOutHtml = awayOut.length ? `
+        <div class="sb-out-players" style="margin-top:4px;">
+          <div class="sb-out-label" style="font-size:10px;color:var(--bad);font-weight:600;">OUT: ${awayOut.map(p => `${p.name} (${p.injury_type || 'Out'})`).join(', ')}</div>
+        </div>
+      ` : '';
+
       return `
         <div class="sb-game">
           <div class="sb-team">
             <span class="sb-team-name">${away.teamTricode || 'AWAY'}</span>
             <span class="sb-team-record">${away.score !== undefined ? away.score : ''}</span>
+            ${awayOutHtml}
           </div>
           <div class="sb-status">
             ${dateDisplay ? `<div class="sb-date" style="font-size:11px;color:var(--ink-muted);margin-bottom:2px;">${dateDisplay}</div>` : ''}
@@ -401,10 +438,46 @@
           <div class="sb-team" style="text-align:right">
             <span class="sb-team-name">${home.teamTricode || 'HOME'}</span>
             <span class="sb-team-record">${home.score !== undefined ? home.score : ''}</span>
+            ${homeOutHtml}
           </div>
         </div>
       `;
     }).join('');
+  }
+
+  async function fetchOutPlayersForGames(gameIds) {
+    const outPlayersByGame = {};
+
+    for (const gameId of gameIds) {
+      try {
+        const resp = await fetch(`/api/today-out-players?date=${todayStr}&game_id=${gameId}`);
+        const data = await resp.json();
+
+        if (data.out_players && data.out_players.length > 0) {
+          const homeOut = [];
+          const awayOut = [];
+
+          data.out_players.forEach(p => {
+            const teamAbbr = p.team;
+            // Determine if home or away
+            const game = games.find(g => g.gameId === gameId);
+            if (game) {
+              if (teamAbbr === game.home?.teamTricode) {
+                homeOut.push(p);
+              } else if (teamAbbr === game.away?.teamTricode) {
+                awayOut.push(p);
+              }
+            }
+          });
+
+          outPlayersByGame[gameId] = { home: homeOut, away: awayOut };
+        }
+      } catch (e) {
+        console.error(`Failed to fetch out players for game ${gameId}`, e);
+      }
+    }
+
+    return outPlayersByGame;
   }
 
   // Convert ESPN gameEt (ISO UTC) to Pacific time string
@@ -439,6 +512,25 @@
     const el = $('#bs-scoreboard-games');
     if (!el) return;
     if (!games.length) { el.innerHTML = '<div class="empty">No games scheduled</div>'; return; }
+
+    // Fetch out players for all games
+    const gameIds = games.map(g => g.gameId).filter(Boolean);
+    let outPlayersByGame = {};
+
+    if (gameIds.length > 0) {
+      fetchOutPlayersForGames(gameIds).then(data => {
+        outPlayersByGame = data;
+        updateBSTodayGamesWithOutPlayers(games, outPlayersByGame);
+      }).catch(e => console.error('Failed to load out players', e));
+    }
+
+    // Initial render without out players
+    updateBSTodayGamesWithOutPlayers(games, {});
+  }
+
+  function updateBSTodayGamesWithOutPlayers(games, outPlayersByGame) {
+    const el = $('#bs-scoreboard-games');
+    if (!el) return;
     el.innerHTML = games.map(g => {
       const home = g.home || {};
       const away = g.away || {};
@@ -453,11 +545,28 @@
           dateDisplay = d.toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Los_Angeles'});
         }
       }
+
+      const homeOut = outPlayersByGame[g.gameId]?.home || [];
+      const awayOut = outPlayersByGame[g.gameId]?.away || [];
+
+      const homeOutHtml = homeOut.length ? `
+        <div class="sb-out-players" style="margin-top:4px;">
+          <div class="sb-out-label" style="font-size:10px;color:var(--bad);font-weight:600;">OUT: ${homeOut.map(p => `${p.name} (${p.injury_type || 'Out'})`).join(', ')}</div>
+        </div>
+      ` : '';
+
+      const awayOutHtml = awayOut.length ? `
+        <div class="sb-out-players" style="margin-top:4px;">
+          <div class="sb-out-label" style="font-size:10px;color:var(--bad);font-weight:600;">OUT: ${awayOut.map(p => `${p.name} (${p.injury_type || 'Out'})`).join(', ')}</div>
+        </div>
+      ` : '';
+
       return `
         <div class="sb-game">
           <div class="sb-team">
             <span class="sb-team-name">${away.teamTricode || 'AWAY'}</span>
             <span class="sb-team-record">${away.score !== undefined ? away.score : ''}</span>
+            ${awayOutHtml}
           </div>
           <div class="sb-status">
             ${dateDisplay ? `<div class="sb-date" style="font-size:11px;color:var(--ink-muted);margin-bottom:2px;">${dateDisplay}</div>` : ''}
@@ -467,6 +576,7 @@
           <div class="sb-team" style="text-align:right">
             <span class="sb-team-name">${home.teamTricode || 'HOME'}</span>
             <span class="sb-team-record">${home.score !== undefined ? home.score : ''}</span>
+            ${homeOutHtml}
           </div>
         </div>
       `;
@@ -998,7 +1108,7 @@
     const tbody = $('#boxscore-results tbody');
     const meta = $('#bs-meta');
     show(results);
-    tbody.innerHTML = '<tr><td colspan="15" class="loading">Loading box score…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" class="loading">Loading box score…</td></tr>';
     meta.textContent = '';
     try {
       const data = await api(`/api/boxscore/${gameId}`);
@@ -1016,6 +1126,7 @@
   function renderBoxScore(data) {
     const tbody = $('#boxscore-results tbody');
     const meta = $('#bs-meta');
+    const top10Container = $('#bs-top10-lines');
     let metaHtml = `<span class="bs-meta-item"><strong>Game ID:</strong> ${data.game_id}</span><span class="bs-meta-item"><strong>Players:</strong> ${data.players.length}</span>`;
 
     // Display game date/time in PCT if available
@@ -1032,6 +1143,9 @@
 
     bsOriginalPlayersData = data.players || [];
 
+    // Render Top 10 Lines of the Day
+    renderTop10Lines(bsOriginalPlayersData);
+
     // If My Team filter is active, fetch My Team box score
     if (bsMyTeamFilterActive) {
       applyMyTeamBoxScoreFilter();
@@ -1041,18 +1155,82 @@
     }
   }
 
+  function renderTop10Lines(players) {
+    const top10Container = $('#bs-top10-lines');
+    if (!top10Container) return;
+
+    // Filter players who actually played (not DNP) and sort by FPS descending
+    const playedPlayers = players.filter(p => p.dnp !== true && p.min && p.min > 0);
+    const top10 = [...playedPlayers].sort((a, b) => (b.fps || 0) - (a.fps || 0)).slice(0, 10);
+
+    if (top10.length === 0) {
+      top10Container.style.display = 'none';
+      return;
+    }
+
+    top10Container.style.display = 'block';
+
+    const rowsHtml = top10.map((p, idx) => {
+      const pos = p.position || p.pos || '';
+      const posBadge = pos ? `<span class="pos-badge pos-${pos.toLowerCase()}">${pos}</span>` : '';
+      const fgVal = p.fga > 0 ? (p.fgm/p.fga * 100) : 0;
+      const fg3Val = p.fg3a > 0 ? (p.fg3m/p.fg3a * 100) : 0;
+      const ftVal = p.fta > 0 ? (p.ftm/p.fta * 100) : 0;
+
+      return `
+        <div class="bs-top10-row">
+          <div class="bs-top10-rank">#${idx + 1}</div>
+          <div class="bs-top10-player">
+            <div class="bs-top10-name">${p.name} ${posBadge}</div>
+            <div class="bs-top10-team">${p.team}</div>
+          </div>
+          <div class="bs-top10-stats">
+            <span>${p.min} min</span>
+            <span>${p.pts} PTS</span>
+            <span>${p.reb} REB</span>
+            <span>${p.ast} AST</span>
+            <span>${p.stl} STL</span>
+            <span>${p.blk} BLK</span>
+            <span>${p.tov} TOV</span>
+            <span>${fgVal.toFixed(1)}% FG</span>
+            <span>${fg3Val.toFixed(1)}% 3P</span>
+            <span>${ftVal.toFixed(1)}% FT</span>
+            <span class="bs-top10-fps">${fmt(p.fps || 0)} FPS</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    top10Container.innerHTML = `
+      <div class="bs-top10-header">
+        <h3>🏆 Top 10 Lines of the Day</h3>
+        <p class="bs-top10-sub">Highest fantasy point performances from this game</p>
+      </div>
+      <div class="bs-top10-list">${rowsHtml}</div>
+    `;
+  }
+
   function sortAndRenderBoxScore() {
     const tbody = $('#boxscore-results tbody');
     if (!bsPlayersData.length) {
-      tbody.innerHTML = '<tr><td colspan="15" class="empty">No player data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="16" class="empty">No player data</td></tr>';
       return;
     }
 
     // Sort
     const sorted = [...bsPlayersData].sort((a, b) => {
-      const va = a[bsSortBy] ?? 0;
-      const vb = b[bsSortBy] ?? 0;
-      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      let va = a[bsSortBy] ?? 0;
+      let vb = b[bsSortBy] ?? 0;
+      let cmp;
+      if (bsSortBy === 'pos') {
+        // String comparison for position
+        va = (va || '').toUpperCase();
+        vb = (vb || '').toUpperCase();
+        cmp = va.localeCompare(vb);
+      } else {
+        // Numeric comparison
+        cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      }
       return bsSortDir === 'desc' ? -cmp : cmp;
     });
 
@@ -1097,8 +1275,13 @@
       // For DNP players, show zeros with muted styling
       const statsStyle = isDnp ? 'style="color: var(--ink-muted)"' : '';
 
+      // Position badge
+      const pos = p.position || p.pos || '';
+      const posBadge = pos ? `<span class="pos-badge pos-${pos.toLowerCase()}">${pos}</span>` : '';
+
       return `
       <tr class="${dnpClass}">
+        <td class="pos-col">${posBadge}</td>
         <td class="player-name">${p.player_id ? `<a href="/player/${p.player_id}" class="player-link">${p.name}</a>` : p.name}</td>
         <td class="team-abbr">${p.team}</td>
         <td class="num">${minDisplay}</td>
@@ -1878,6 +2061,7 @@
 
   // Open the Add Player modal (uses the modal from index.html)
   // Shows a full list of all players with checkboxes for team membership
+  // Also shows today's OUT players from game injuries at the top
   function openAddPlayerModal() {
     const modal = $('#add-player-modal');
     if (!modal) {
@@ -1885,27 +2069,30 @@
       return;
     }
 
+    // Modal elements (available every time)
+    const searchInput = $('#modal-player-search');
+    const resultsContainer = $('#modal-results');
+    const autocompleteEl = $('#modal-player-ac');
+    if (autocompleteEl) autocompleteEl.hidden = true; // Hide autocomplete dropdown
+
+    // State variables (persist on modal element)
+    if (!modal.allPlayers) modal.allPlayers = [];
+    if (!modal.filteredPlayers) modal.filteredPlayers = [];
+    if (!modal.outPlayersByTeam) modal.outPlayersByTeam = {};
+    if (!modal.searchDebounce) modal.searchDebounce = null;
+
     // Setup search and list rendering (only once)
     if (!modal.dataset.listSetup) {
       modal.dataset.listSetup = 'true';
 
-      const searchInput = $('#modal-player-search');
-      const resultsContainer = $('#modal-results');
-      const autocompleteEl = $('#modal-player-ac');
-      if (autocompleteEl) autocompleteEl.hidden = true; // Hide autocomplete dropdown
-
-      let allPlayers = [];
-      let filteredPlayers = [];
-      let searchDebounce = null;
-
       // Load all players from cache or API
-      async function loadAllPlayers() {
+      modal.loadAllPlayers = async function() {
         if (playerCache.length) {
-          allPlayers = playerCache;
+          modal.allPlayers = playerCache;
         } else {
           try {
             const data = await api('/api/players/search?limit=500&include_fps=true');
-            allPlayers = data;
+            modal.allPlayers = data;
             playerCache = data; // Cache for future use
           } catch (e) {
             console.error('Failed to load players', e);
@@ -1913,44 +2100,103 @@
             return;
           }
         }
-        filteredPlayers = [...allPlayers];
-        renderPlayerList();
-      }
+        modal.filteredPlayers = [...modal.allPlayers];
+        modal.renderPlayerList();
+      };
 
-      // Render the full player list with checkboxes
-      function renderPlayerList() {
+      // Load today's OUT players from game injuries
+      modal.loadOutPlayers = async function() {
+        try {
+          const today = new Date().toISOString().split('T')[0];
+          const data = await api(`/api/today-out-players?date=${today}`);
+          if (data.out_players && data.out_players.length > 0) {
+            // Group by team
+            modal.outPlayersByTeam = {};
+            data.out_players.forEach(p => {
+              const team = p.team || 'FA';
+              if (!modal.outPlayersByTeam[team]) modal.outPlayersByTeam[team] = [];
+              modal.outPlayersByTeam[team].push(p);
+            });
+          }
+        } catch (e) {
+          console.error('Failed to load out players', e);
+        }
+      };
+
+      // Render the full player list with checkboxes, plus out players section
+      modal.renderPlayerList = function() {
         const myTeam = getMyTeam();
         const myTeamIds = new Set(myTeam.map(p => p.id.toString()));
 
-        if (!filteredPlayers.length) {
-          resultsContainer.innerHTML = '<p class="empty">No players match your search</p>';
-          return;
+        // Build out players HTML section
+        let outPlayersHtml = '';
+        const teamOrder = Object.keys(modal.outPlayersByTeam).sort();
+        if (teamOrder.length > 0) {
+          outPlayersHtml = '<div class="modal-out-players-section">';
+          outPlayersHtml += '<div class="modal-out-players-header">⚠️ Players OUT Today (from game injury reports)</div>';
+          teamOrder.forEach(team => {
+            const players = modal.outPlayersByTeam[team];
+            outPlayersHtml += `<div class="modal-out-team-group">`;
+            outPlayersHtml += `<div class="modal-out-team-label">${team}</div>`;
+            outPlayersHtml += `<div class="modal-out-player-list">`;
+            players.forEach(p => {
+              const isOnTeam = myTeamIds.has(p.player_id.toString());
+              const injuryInfo = [];
+              if (p.injury_type) injuryInfo.push(p.injury_type);
+              if (p.injury_detail) injuryInfo.push(p.injury_detail);
+              if (p.return_date) injuryInfo.push(`Return: ${p.return_date}`);
+              const injuryText = injuryInfo.join(' • ');
+              outPlayersHtml += `
+                <div class="modal-result-item modal-out-player" data-id="${p.player_id}" data-name="${p.name}" data-team="${p.team}">
+                  <div class="modal-result-face">${p.name.split(' ')[0]?.charAt(0)?.toUpperCase() || '?'}</div>
+                  <div class="modal-result-info">
+                    <div class="modal-result-name">${p.name} ${p.position ? `<span class="pos-badge pos-${p.position.toLowerCase()}">${p.position}</span>` : ''}</div>
+                    <div class="modal-result-meta">
+                      <span class="modal-out-injury" style="font-size:11px;color:var(--bad);">${injuryText || 'Out'}</span>
+                    </div>
+                  </div>
+                  <input type="checkbox" class="modal-result-check ${isOnTeam ? 'checked' : ''}" ${isOnTeam ? 'checked' : ''} data-player-id="${p.player_id}" data-player-name="${p.name}" data-player-team="${p.team}">
+                </div>`;
+            });
+            outPlayersHtml += `</div></div>`;
+          });
+          outPlayersHtml += '</div>';
         }
 
-        resultsContainer.innerHTML = filteredPlayers.map(p => {
-          const fps = p.avg_fps || 0;
-          const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
-          const firstName = (p.DISPLAY_FIRST_LAST || '').split(' ')[0] || '';
-          const initials = firstName ? firstName.charAt(0).toUpperCase() : '?';
-          const isOnTeam = myTeamIds.has(p.PERSON_ID.toString());
+        // Regular player list
+        let playerListHtml = '';
+        if (!modal.filteredPlayers.length) {
+          playerListHtml = '<p class="empty">No players match your search</p>';
+        } else {
+          playerListHtml = modal.filteredPlayers.map(p => {
+            const fps = p.avg_fps || 0;
+            const fpsClass = fps >= 25 ? 'fps-good' : 'fps-bad';
+            const firstName = (p.DISPLAY_FIRST_LAST || '').split(' ')[0] || '';
+            const initials = firstName ? firstName.charAt(0).toUpperCase() : '?';
+            const isOnTeam = myTeamIds.has(p.PERSON_ID.toString());
 
-          return `
-          <div class="modal-result-item" data-id="${p.PERSON_ID}" data-name="${p.DISPLAY_FIRST_LAST}" data-team="${p.TEAM_ABBREVIATION || 'FA'}">
-            <div class="modal-result-face">${initials}</div>
-            <div class="modal-result-info">
-              <div class="modal-result-name">${p.DISPLAY_FIRST_LAST}</div>
-              <div class="modal-result-meta">
-                <span class="modal-result-team">${p.TEAM_ABBREVIATION || 'FA'}</span>
-                <span class="modal-result-fps ${fpsClass}">${fmt(fps, 1)} FPS</span>
+            const pos = p.POSITION || '';
+            const posBadge = pos ? `<span class="pos-badge pos-${pos.toLowerCase()}">${pos}</span>` : '';
+            return `
+            <div class="modal-result-item" data-id="${p.PERSON_ID}" data-name="${p.DISPLAY_FIRST_LAST}" data-team="${p.TEAM_ABBREVIATION || 'FA'}">
+              <div class="modal-result-face">${initials}</div>
+              <div class="modal-result-info">
+                <div class="modal-result-name">${p.DISPLAY_FIRST_LAST} ${posBadge}</div>
+                <div class="modal-result-meta">
+                  <span class="modal-result-team">${p.TEAM_ABBREVIATION || 'FA'}</span>
+                  <span class="modal-result-fps ${fpsClass}">${fmt(fps, 1)} FPS</span>
+                </div>
               </div>
-            </div>
-            <input type="checkbox" class="modal-result-check ${isOnTeam ? 'checked' : ''}" ${isOnTeam ? 'checked' : ''} data-player-id="${p.PERSON_ID}" data-player-name="${p.DISPLAY_FIRST_LAST}" data-player-team="${p.TEAM_ABBREVIATION || 'FA'}">
-          </div>`;
-        }).join('');
+              <input type="checkbox" class="modal-result-check ${isOnTeam ? 'checked' : ''}" ${isOnTeam ? 'checked' : ''} data-player-id="${p.PERSON_ID}" data-player-name="${p.DISPLAY_FIRST_LAST}" data-player-team="${p.TEAM_ABBREVIATION || 'FA'}">
+            </div>`;
+          }).join('');
+        }
 
-        // Attach checkbox handlers
+        resultsContainer.innerHTML = outPlayersHtml + playerListHtml;
+
+        // Attach checkbox handlers for ALL checkboxes (out players + regular)
         $$('.modal-result-check', resultsContainer).forEach(checkbox => {
-          checkbox.addEventListener('change', handleCheckboxChange);
+          checkbox.addEventListener('change', modal.handleCheckboxChange);
         });
 
         // Also allow clicking the row to toggle
@@ -1965,10 +2211,10 @@
             }
           });
         });
-      }
+      };
 
       // Handle checkbox change - add/remove from team
-      function handleCheckboxChange(e) {
+      modal.handleCheckboxChange = function(e) {
         const checkbox = e.target;
         const playerId = checkbox.dataset.playerId;
         const playerName = checkbox.dataset.playerName;
@@ -1994,23 +2240,23 @@
           renderMyTeamPage();
           updateMyTeamCountDisplays();
         }
-      }
+      };
 
       // Search input handler - filter in real-time like rankings page
       searchInput.addEventListener('input', () => {
-        clearTimeout(searchDebounce);
-        searchDebounce = setTimeout(() => {
+        clearTimeout(modal.searchDebounce);
+        modal.searchDebounce = setTimeout(() => {
           const q = searchInput.value.trim().toLowerCase();
           if (!q) {
-            filteredPlayers = [...allPlayers];
+            modal.filteredPlayers = [...modal.allPlayers];
           } else {
-            filteredPlayers = allPlayers.filter(p => {
+            modal.filteredPlayers = modal.allPlayers.filter(p => {
               const name = (p.DISPLAY_FIRST_LAST || '').toLowerCase();
               const tokens = name.split(/[\s'-]+/).filter(Boolean);
               return tokens.some(t => t.startsWith(q)) || name.includes(q);
             });
           }
-          renderPlayerList();
+          modal.renderPlayerList();
         }, 50);
       });
 
@@ -2022,17 +2268,30 @@
       document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(modal); });
     }
 
-    // Load players and show modal
-    const searchInput = $('#modal-player-search');
-    const resultsContainer = $('#modal-results');
+    // Load players and show modal (runs every time)
     searchInput.value = '';
     resultsContainer.innerHTML = '<p class="loading">Loading players…</p>';
     show(modal);
     searchInput.focus();
 
-    // Load players (uses cache if available)
-    loadAllPlayers().then(() => {
-      // Re-render in case search was typed while loading
+    // Load both out players and all players
+    Promise.all([
+      // Load out players first
+      (async () => {
+        await modal.loadOutPlayers();
+      })(),
+      // Load all players
+      (async () => {
+        if (playerCache.length && modal.allPlayers.length) {
+          // Use cached, just need to render
+          modal.filteredPlayers = [...modal.allPlayers];
+          modal.renderPlayerList();
+          return;
+        }
+        await modal.loadAllPlayers();
+      })()
+    ]).catch(e => {
+      console.error('Failed to load modal data', e);
     });
   }
 

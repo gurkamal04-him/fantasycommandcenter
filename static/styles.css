@@ -1311,6 +1311,65 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   flex-shrink: 0;
 }
 
+/* Out players section in add player modal */
+.modal-out-players-section {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(255, 123, 123, 0.08);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-sm);
+}
+
+.modal-out-players-header {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--bad);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-out-team-group {
+  margin-bottom: 12px;
+}
+
+.modal-out-team-group:last-child {
+  margin-bottom: 0;
+}
+
+.modal-out-team-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+
+.modal-out-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-out-player {
+  background: var(--surface-3) !important;
+  border-color: var(--bad) !important;
+}
+
+.modal-out-player:hover {
+  background: var(--surface-2) !important;
+  border-color: var(--bad) !important;
+}
+
+.modal-out-injury {
+  font-weight: 500;
+}
+
 .my-team-filter-btn {
   font-family: var(--font-display);
   font-weight: 600;
@@ -1390,4 +1449,147 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
   background: rgba(255, 123, 123, 0.15);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+/* Position badges (lowercase for JS-generated classes) */
+.pos-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: white;
+}
+.pos-pg { background: #22c55e; }  /* Green */
+.pos-sg { background: #f59e0b; }  /* Amber */
+.pos-sf { background: #3b82f6; }  /* Blue */
+.pos-pf { background: #8b5cf6; }  /* Purple */
+.pos-c  { background: #ef4444; }  /* Red */
+.pos-g  { background: #14b8a6; }  /* Teal */
+.pos-f  { background: #f97316; }  /* Orange */
+
+/* Top 10 Lines of the Day */
+.bs-top10-lines {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.bs-top10-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bs-top10-header h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bs-top10-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.bs-top10-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bs-top10-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.bs-top10-row:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.bs-top10-rank {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink-muted);
+  text-align: right;
+}
+
+.bs-top10-player {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bs-top10-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bs-top10-team {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bs-top10-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.bs-top10-stats span {
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.bs-top10-fps {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--good);
+  background: rgba(76, 198, 138, 0.15) !important;
+  border-color: var(--good) !important;
+}
+
+/* Position column in boxscore table */
+.pos-col {
+  width: 48px;
+  text-align: center;
+}
+
+.pos-col .pos-badge {
+  margin: 0 auto;
 }
