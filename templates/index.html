@@ -59,6 +59,7 @@
         <input id="scoreboard-date" type="date" value="{{ today }}">
         <button class="btn btn-ghost" id="sb-refresh">Refresh</button>
       </div>
+      <div id="scoreboard-meta" class="sb-meta" style="margin-bottom: 8px; font-size: 12px; color: var(--ink-muted);"></div>
       <div id="scoreboard-games" class="scoreboard-list">Loading…</div>
     </section>
 
@@ -291,6 +292,13 @@
   </div>
   <div class="controls-row" id="bs-controls" style="margin-top: 8px;"></div>
 
+  <!-- Top 10 Lines of the Day (always visible at top of page) -->
+  <div class="panel" id="bs-top10-panel">
+    <h2>Top 10 Lines of the Day</h2>
+    <div id="bs-top10-meta" class="sb-meta" style="margin-bottom: 8px; font-size: 12px; color: var(--ink-muted);"></div>
+    <div id="bs-top10-lines" class="bs-top10-lines" style="display:none;"></div>
+  </div>
+
   <!-- Today's Games (on Box Score page) -->
   <div class="panel hub-card" id="bs-todays-games" style="margin-top:16px">
     <h2>Today's Games</h2>
@@ -299,12 +307,11 @@
       <input id="bs-scoreboard-date" type="date" value="{{ today }}">
       <button class="btn btn-ghost" id="bs-sb-refresh">Refresh</button>
     </div>
+    <div id="bs-scoreboard-meta" class="sb-meta" style="margin-bottom: 8px; font-size: 12px; color: var(--ink-muted);"></div>
     <div id="bs-scoreboard-games" class="scoreboard-list">Loading…</div>
   </div>
 
   <div class="panel" id="boxscore-results" hidden>
-    <!-- Top 10 Lines of the Day -->
-    <div id="bs-top10-lines" class="bs-top10-lines" style="display:none;"></div>
 
     <div class="bs-meta" id="bs-meta"></div>
     <div class="table-wrap">
@@ -415,6 +422,130 @@
         </thead>
         <tbody id="rk-tbody"></tbody>
       </table>
+    </div>
+  </div>
+</section>
+
+<!-- =================================================================== -->
+<!-- BUY LOW / SELL HIGH                                                 -->
+<!-- =================================================================== -->
+<section id="buysell" class="page" aria-labelledby="buysell-title" hidden>
+  <header class="page-header">
+    <div class="eyebrow">Market Analysis</div>
+    <h1 id="buysell-title">Buy Low / Sell High</h1>
+    <p class="sub">Compare each player's FPS average over a selected period vs their whole-season FPS average. Sell High = running hot; Buy Low = running cold.</p>
+  </header>
+
+  <div class="controls-row">
+    <div class="field">
+      <label for="blsh-period">Time Period</label>
+      <select id="blsh-period" class="select">
+        <option value="1month" selected>Last Month</option>
+        <option value="2weeks">Last 2 Weeks</option>
+        <option value="1week">Last Week</option>
+        <option value="custom">Custom Range</option>
+      </select>
+    </div>
+    <div class="field" id="blsh-custom-range" hidden>
+      <label>Custom Date Range</label>
+      <div class="date-range">
+        <input id="blsh-start-date" type="date" class="input">
+        <span class="date-range-sep">→</span>
+        <input id="blsh-end-date" type="date" class="input">
+      </div>
+    </div>
+    <div class="field">
+      <label for="blsh-season">Season</label>
+      <select id="blsh-season" class="select">
+        <option value="2026-27" selected>2026-27</option>
+        <option value="2025-26">2025-26</option>
+        <option value="2024-25">2024-25</option>
+        <option value="2023-24">2023-24</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="blsh-min-games">Min Games in Period</label>
+      <select id="blsh-min-games" class="select">
+        <option value="1">1+</option>
+        <option value="2">2+</option>
+        <option value="3" selected>3+</option>
+        <option value="4">4+</option>
+        <option value="5">5+</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="blsh-min-fps">Min Season FPS</label>
+      <select id="blsh-min-fps" class="select">
+        <option value="5">5+</option>
+        <option value="10" selected>10+</option>
+        <option value="15">15+</option>
+        <option value="20">20+</option>
+        <option value="25">25+</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="blsh-team">Team Filter</label>
+      <select id="blsh-team" class="select">
+        <option value="">All Teams</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="blsh-load">Load Analysis</button>
+    <button class="btn btn-ghost" id="blsh-export">Export CSV</button>
+  </div>
+  <div class="controls-row" id="buysell-controls" style="margin-top: 8px;">
+    <div class="field" style="max-width: 300px;">
+      <label for="blsh-search">Search Players</label>
+      <input id="blsh-search" type="text" class="input" placeholder="Filter by name..." autocomplete="off">
+    </div>
+  </div>
+
+  <div class="panel" id="buysell-results">
+    <div class="blsh-meta" id="blsh-meta"></div>
+
+    <!-- SELL HIGH PANEL -->
+    <div class="blsh-panel sell-high" id="blsh-sell-high">
+      <h2 class="blsh-panel-title">📈 SELL HIGH</h2>
+      <p class="blsh-panel-desc">Players outperforming their season average (Period FPS > Season FPS). Consider trading while value is peaked.</p>
+      <div class="table-wrap">
+        <table class="data-table blsh-table" id="blsh-sell-table">
+          <thead>
+            <tr>
+              <th class="blsh-rank">#</th>
+              <th class="th-sort" data-sort="name">Player</th>
+              <th class="th-sort" data-sort="team">Team</th>
+              <th class="th-sort blsh-gms" data-sort="games">Gms</th>
+              <th class="th-sort" data-sort="season_fps">Season FPS</th>
+              <th class="th-sort" data-sort="period_fps">Period FPS</th>
+              <th class="th-sort blsh-diff" data-sort="diff">Diff</th>
+              <th class="th-sort blsh-pct" data-sort="diff_pct">Diff %</th>
+            </tr>
+          </thead>
+          <tbody id="blsh-sell-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BUY LOW PANEL -->
+    <div class="blsh-panel buy-low" id="blsh-buy-low">
+      <h2 class="blsh-panel-title">📉 BUY LOW</h2>
+      <p class="blsh-panel-desc">Players underperforming their season average (Period FPS < Season FPS). Target as bounce-back candidates.</p>
+      <div class="table-wrap">
+        <table class="data-table blsh-table" id="blsh-buy-table">
+          <thead>
+            <tr>
+              <th class="blsh-rank">#</th>
+              <th class="th-sort" data-sort="name">Player</th>
+              <th class="th-sort" data-sort="team">Team</th>
+              <th class="th-sort blsh-gms" data-sort="games">Gms</th>
+              <th class="th-sort" data-sort="season_fps">Season FPS</th>
+              <th class="th-sort" data-sort="period_fps">Period FPS</th>
+              <th class="th-sort blsh-diff" data-sort="diff">Diff</th>
+              <th class="th-sort blsh-pct" data-sort="diff_pct">Diff %</th>
+            </tr>
+          </thead>
+          <tbody id="blsh-buy-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>

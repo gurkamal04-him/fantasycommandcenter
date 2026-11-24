@@ -26,6 +26,68 @@
   function hide(el) { el.hidden = true; }
   function setText(el, text) { if (el) el.textContent = text; }
 
+  // Toast notifications
+  function showToast(message, type = 'info') {
+    // Remove existing toast container if any
+    let container = $('#toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 8px;';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.style.cssText = `
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      animation: slideIn 0.3s ease;
+      max-width: 320px;
+      word-wrap: break-word;
+    `;
+
+    // Color based on type
+    const colors = {
+      success: { bg: '#1a3c2e', border: '#2e7d4e', text: '#86efac' },
+      warning: { bg: '#3c2e1a', border: '#7d5e2e', text: '#fde68a' },
+      error: { bg: '#3c1a1a', border: '#7d2e2e', text: '#fca5a5' },
+      info: { bg: '#1a2e3c', border: '#2e5e7d', text: '#93c5fd' }
+    };
+    const c = colors[type] || colors.info;
+    toast.style.background = c.bg;
+    toast.style.border = `1px solid ${c.border}`;
+    toast.style.color = c.text;
+
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease forwards';
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+  // Add CSS for toast animations
+  (() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateX(100%); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes slideOut {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(100%); }
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
   // ===================================================================
   // Readiness probe — waits for the server's warm-up to finish before
   // revealing the page. The overlay in base.html blocks the view until
@@ -143,6 +205,81 @@
   // ===================================================================
   const pages = $$('.page');
   const navLinks = $$('.nav-link[data-page]');
+
+  // Refresh status polling
+  let refreshStatusPollTimer = null;
+  let lastRefreshStatusData = null;
+
+  async function pollRefreshStatus() {
+    try {
+      const data = await api('/api/refresh-status');
+      lastRefreshStatusData = data;
+      updateRefreshStatusUI(data);
+    } catch (e) {
+      console.error('Failed to poll refresh status:', e);
+    }
+  }
+
+  function updateRefreshStatusUI(data) {
+    // Update refresh status indicator in header
+    const indicator = $('#refresh-status-indicator');
+    if (!indicator) return;
+
+    const live = data.live;
+    const daily = data.daily;
+    const now = Date.now(); // milliseconds
+
+    // Helper to parse ISO string or timestamp to milliseconds
+    const parseTime = (val) => {
+      if (!val) return 0;
+      // If it's already a number (timestamp in seconds), convert to ms
+      if (typeof val === 'number') return val * 1000;
+      // If it's an ISO string, parse it
+      const parsed = Date.parse(val);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    let statusHtml = '';
+    let statusClass = '';
+
+    if (live.status === 'running' || daily.status === 'running') {
+      statusClass = 'refresh-status-running';
+      statusHtml = '<span class="refresh-spinner"></span> Refreshing…';
+    } else {
+      const liveNextRun = parseTime(live.next_run);
+      const dailyNextRun = parseTime(daily.next_run);
+      const liveBackoffUntil = parseTime(live.backoff_until);
+      const dailyBackoffUntil = parseTime(daily.backoff_until);
+      const liveStale = liveBackoffUntil > now;
+      const dailyStale = dailyBackoffUntil > now;
+
+      if (liveStale) {
+        statusClass = 'refresh-status-backoff';
+        const waitMin = Math.ceil((liveBackoffUntil - now) / 60000);
+        statusHtml = `⚠ Live job backing off (${waitMin}m)`;
+      } else if (dailyStale) {
+        statusClass = 'refresh-status-backoff';
+        const waitMin = Math.ceil((dailyBackoffUntil - now) / 60000);
+        statusHtml = `⚠ Daily job backing off (${waitMin}m)`;
+      } else {
+        statusClass = 'refresh-status-ok';
+        const nextRefreshMin = liveNextRun ? Math.ceil((liveNextRun - now) / 60000) : '?';
+        statusHtml = `Next live refresh in ${nextRefreshMin}m`;
+      }
+    }
+
+    indicator.className = `refresh-status-indicator ${statusClass}`;
+    indicator.innerHTML = statusHtml;
+  }
+
+  // Initialize refresh status polling when page loads
+  function initRefreshStatusPolling() {
+    // Initial fetch
+    pollRefreshStatus();
+    // Poll every 30 seconds
+    if (refreshStatusPollTimer) clearInterval(refreshStatusPollTimer);
+    refreshStatusPollTimer = setInterval(pollRefreshStatus, 30000);
+  }
 
   function activatePage(pageId) {
     const target = $(`#${pageId}`);
@@ -358,21 +495,91 @@
     $('#scoreboard-date').value = todayStr;
   }
 
+  let scoreboardAutoRefreshInterval = null;
+
+  function startScoreboardAutoRefresh(date, meta) {
+    if (scoreboardAutoRefreshInterval) {
+      clearInterval(scoreboardAutoRefreshInterval);
+    }
+    // Calculate next refresh time from metadata, default to 15 minutes
+    let refreshInterval = 15 * 60 * 1000; // default 15 minutes
+    if (meta?.next_refresh_at) {
+      const nextRefreshMs = meta.next_refresh_at * 1000;
+      const now = Date.now();
+      const intervalMs = nextRefreshMs - now;
+      if (intervalMs > 0 && intervalMs < 30 * 60 * 1000) { // cap at 30 minutes
+        refreshInterval = intervalMs;
+      }
+    }
+    scoreboardAutoRefreshInterval = setInterval(async () => {
+      try {
+        const data = await api(`/api/scoreboard?date=${date}`);
+        // Update next refresh interval based on new metadata
+        if (data.next_refresh_at) {
+          const nextRefreshMs = data.next_refresh_at * 1000;
+          const now = Date.now();
+          const intervalMs = nextRefreshMs - now;
+          if (intervalMs > 0 && intervalMs < 30 * 60 * 1000) {
+            clearInterval(scoreboardAutoRefreshInterval);
+            startScoreboardAutoRefresh(date, data);
+            return;
+          }
+        }
+        renderScoreboard(data.games, data);
+      } catch (e) {
+        console.error('Scoreboard auto-refresh failed:', e);
+      }
+    }, refreshInterval);
+  }
+
+  function stopScoreboardAutoRefresh() {
+    if (scoreboardAutoRefreshInterval) {
+      clearInterval(scoreboardAutoRefreshInterval);
+      scoreboardAutoRefreshInterval = null;
+    }
+  }
+
   async function loadScoreboard(date) {
     const el = $('#scoreboard-games');
+    const metaEl = $('#scoreboard-meta');
     el.innerHTML = '<div class="loading">Loading games…</div>';
+    if (metaEl) metaEl.innerHTML = '';
     try {
       const data = await api(`/api/scoreboard?date=${date}`);
-      renderScoreboard(data.games);
+      renderScoreboard(data.games, data);
+      // Start auto-refresh for scoreboard
+      startScoreboardAutoRefresh(date, data);
     } catch (e) {
       el.innerHTML = '<div class="empty">Failed to load games</div>';
       console.error(e);
     }
   }
 
-  function renderScoreboard(games) {
+  function renderScoreboard(games, meta) {
     const el = $('#scoreboard-games');
+    const metaEl = $('#scoreboard-meta');
     if (!games.length) { el.innerHTML = '<div class="empty">No games scheduled</div>'; return; }
+
+    // Display cache metadata
+    if (metaEl && meta) {
+      let metaHtml = '';
+      if (meta.generated_at) {
+        const genTime = new Date(meta.generated_at * 1000);
+        metaHtml += `<span class="sb-meta-item">Updated: ${genTime.toLocaleTimeString()}</span>`;
+      }
+      if (meta.next_refresh_at) {
+        const nextTime = new Date(meta.next_refresh_at * 1000);
+        const mins = Math.ceil((meta.next_refresh_at * 1000 - Date.now()) / 60000);
+        metaHtml += `<span class="sb-meta-item">Next refresh: ${nextTime.toLocaleTimeString()} (${mins}m)</span>`;
+      }
+      if (meta.stale) {
+        metaHtml += `<span class="sb-meta-item stale-warning">⚠ Showing stale data</span>`;
+      }
+      if (meta.source) {
+        metaHtml += `<span class="sb-meta-item">Source: ${meta.source}</span>`;
+      }
+      metaEl.innerHTML = metaHtml;
+    }
 
     // Fetch out players for all games
     const gameIds = games.map(g => g.gameId).filter(Boolean);
@@ -391,6 +598,7 @@
     updateScoreboardWithOutPlayers(games, {});
   }
 
+  
   function updateScoreboardWithOutPlayers(games, outPlayersByGame) {
     const el = $('#scoreboard-games');
     el.innerHTML = games.map(g => {
@@ -492,26 +700,158 @@
   $('#sb-refresh')?.addEventListener('click', () => loadScoreboard($('#scoreboard-date').value));
   loadScoreboard(todayStr);
 
+  // Manual refresh button handlers
+  async function triggerLiveRefresh() {
+    const btn = $('#manual-refresh-live');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Refreshing…';
+    }
+    try {
+      const resp = await api('/api/refresh/live', { method: 'POST' });
+      if (resp.status === 'started') {
+        showToast('Live refresh started', 'success');
+        // Wait for refresh to complete, then reload data
+        await waitForRefreshComplete('live');
+        showToast('Live refresh complete', 'success');
+        loadScoreboard($('#scoreboard-date').value);
+        loadBSTodayGames($('#bs-date-input').value);
+      } else if (resp.status === 'skipped') {
+        showToast(`Live refresh skipped: ${resp.reason || 'job busy or in backoff'}`, 'warning');
+      }
+    } catch (e) {
+      console.error('Manual live refresh failed:', e);
+      showToast('Failed to trigger live refresh', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Refresh Live';
+      }
+    }
+  }
+
+  async function triggerDailyRefresh() {
+    const btn = $('#manual-refresh-daily');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Refreshing…';
+    }
+    try {
+      const resp = await api('/api/refresh/daily', { method: 'POST' });
+      if (resp.status === 'started') {
+        showToast('Daily refresh started', 'success');
+        // Wait for refresh to complete
+        await waitForRefreshComplete('daily');
+        showToast('Daily refresh complete', 'success');
+        // Reload rankings and other daily data
+        if (typeof loadRankings === 'function') loadRankings();
+        loadBSTodayGames($('#bs-date-input').value);
+      } else if (resp.status === 'skipped') {
+        showToast(`Daily refresh skipped: ${resp.reason || 'job busy or in backoff'}`, 'warning');
+      }
+    } catch (e) {
+      console.error('Manual daily refresh failed:', e);
+      showToast('Failed to trigger daily refresh', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Refresh Daily';
+      }
+    }
+  }
+
+  // Wait for a refresh job to complete (status changes from 'running' to 'success' or 'error')
+  async function waitForRefreshComplete(jobType, maxWaitMs = 120000) {
+    const startTime = Date.now();
+    const pollInterval = 2000; // Check every 2 seconds
+
+    return new Promise((resolve) => {
+      const checkStatus = async () => {
+        try {
+          const data = await api('/api/refresh-status');
+          const job = data[jobType];
+          if (job.status === 'success') {
+            resolve();
+            return;
+          }
+          if (job.status === 'error') {
+            showToast(`${jobType} refresh failed: ${job.error || 'Unknown error'}`, 'error');
+            resolve();
+            return;
+          }
+          // Still running, check again if not timed out
+          if (Date.now() - startTime < maxWaitMs) {
+            setTimeout(checkStatus, pollInterval);
+          } else {
+            showToast(`${jobType} refresh timed out`, 'warning');
+            resolve();
+          }
+        } catch (e) {
+          console.error('Error polling refresh status:', e);
+          if (Date.now() - startTime < maxWaitMs) {
+            setTimeout(checkStatus, pollInterval);
+          } else {
+            showToast(`${jobType} refresh timed out`, 'warning');
+            resolve();
+          }
+        }
+      };
+      checkStatus();
+    });
+  }
+
+  $('#manual-refresh-live')?.addEventListener('click', triggerLiveRefresh);
+  $('#manual-refresh-daily')?.addEventListener('click', triggerDailyRefresh);
+
   // ===================================================================
   // Box Score "Today's Games" Panel
   // ===================================================================
   async function loadBSTodayGames(date) {
     const el = $('#bs-scoreboard-games');
+    const metaEl = $('#bs-scoreboard-meta');
     if (!el) return;
     el.innerHTML = '<div class="loading">Loading games…</div>';
+    if (metaEl) metaEl.innerHTML = '';
     try {
       const data = await api(`/api/scoreboard?date=${date}`);
-      renderBSTodayGames(data.games);
+      renderBSTodayGames(data.games, data);
+      // Start auto-refresh for BS scoreboard
+      startBSScoreboardAutoRefresh(date, data);
     } catch (e) {
       el.innerHTML = '<div class="empty">Failed to load games</div>';
       console.error(e);
     }
+
+    // Also load daily top 10 for this date
+    loadDailyTop10(date);
   }
 
-  function renderBSTodayGames(games) {
+  function renderBSTodayGames(games, meta) {
     const el = $('#bs-scoreboard-games');
+    const metaEl = $('#bs-scoreboard-meta');
     if (!el) return;
     if (!games.length) { el.innerHTML = '<div class="empty">No games scheduled</div>'; return; }
+
+    // Display cache metadata
+    if (metaEl && meta) {
+      let metaHtml = '';
+      if (meta.generated_at) {
+        const genTime = new Date(meta.generated_at * 1000);
+        metaHtml += `<span class="sb-meta-item">Updated: ${genTime.toLocaleTimeString()}</span>`;
+      }
+      if (meta.next_refresh_at) {
+        const nextTime = new Date(meta.next_refresh_at * 1000);
+        const mins = Math.ceil((meta.next_refresh_at * 1000 - Date.now()) / 60000);
+        metaHtml += `<span class="sb-meta-item">Next refresh: ${nextTime.toLocaleTimeString()} (${mins}m)</span>`;
+      }
+      if (meta.stale) {
+        metaHtml += `<span class="sb-meta-item stale-warning">⚠ Showing stale data</span>`;
+      }
+      if (meta.source) {
+        metaHtml += `<span class="sb-meta-item">Source: ${meta.source}</span>`;
+      }
+      metaEl.innerHTML = metaHtml;
+    }
 
     // Fetch out players for all games
     const gameIds = games.map(g => g.gameId).filter(Boolean);
@@ -589,6 +929,8 @@
     bsDateInput.value = todayStr;
     loadBSTodayGames(todayStr);
     $('#bs-sb-refresh')?.addEventListener('click', () => loadBSTodayGames(bsDateInput.value));
+    // Load daily top 10 when date changes
+    bsDateInput.addEventListener('change', () => loadDailyTop10(bsDateInput.value));
   }
 
   // ===================================================================
@@ -1122,11 +1464,93 @@
   let bsSortBy = 'fps';
   let bsSortDir = 'desc';
   let bsMyTeamFilterActive = false;
+  let bsAutoRefreshInterval = null; // Auto-refresh interval for live box score updates
+  let bsScoreboardAutoRefreshInterval = null; // Auto-refresh for BS scoreboard
+  let dailyTop10AutoRefreshInterval = null; // Auto-refresh for daily top 10
+
+  function startDailyTop10AutoRefresh(date, meta) {
+    if (dailyTop10AutoRefreshInterval) {
+      clearInterval(dailyTop10AutoRefreshInterval);
+    }
+    let refreshInterval = 60 * 60 * 1000; // default 1 hour (daily job runs at 4 AM)
+    if (meta?.next_refresh_at) {
+      const nextRefreshMs = meta.next_refresh_at * 1000;
+      const now = Date.now();
+      const intervalMs = nextRefreshMs - now;
+      if (intervalMs > 0 && intervalMs < 24 * 60 * 60 * 1000) { // cap at 24 hours
+        refreshInterval = intervalMs;
+      }
+    }
+    dailyTop10AutoRefreshInterval = setInterval(async () => {
+      try {
+        const data = await api(`/api/daily-top10?date=${date}`);
+        if (data.next_refresh_at) {
+          const nextRefreshMs = data.next_refresh_at * 1000;
+          const now = Date.now();
+          const intervalMs = nextRefreshMs - now;
+          if (intervalMs > 0 && intervalMs < 24 * 60 * 60 * 1000) {
+            clearInterval(dailyTop10AutoRefreshInterval);
+            startDailyTop10AutoRefresh(date, data);
+            return;
+          }
+        }
+        renderDailyTop10Lines(data.top10, date, data);
+      } catch (e) {
+        console.error('Daily top 10 auto-refresh failed:', e);
+      }
+    }, refreshInterval);
+  }
+
+  function stopDailyTop10AutoRefresh() {
+    if (dailyTop10AutoRefreshInterval) {
+      clearInterval(dailyTop10AutoRefreshInterval);
+      dailyTop10AutoRefreshInterval = null;
+    }
+  }
+
+  function startBSScoreboardAutoRefresh(date, meta) {
+    if (bsScoreboardAutoRefreshInterval) {
+      clearInterval(bsScoreboardAutoRefreshInterval);
+    }
+    let refreshInterval = 15 * 60 * 1000; // default 15 minutes
+    if (meta?.next_refresh_at) {
+      const nextRefreshMs = meta.next_refresh_at * 1000;
+      const now = Date.now();
+      const intervalMs = nextRefreshMs - now;
+      if (intervalMs > 0 && intervalMs < 30 * 60 * 1000) {
+        refreshInterval = intervalMs;
+      }
+    }
+    bsScoreboardAutoRefreshInterval = setInterval(async () => {
+      try {
+        const data = await api(`/api/scoreboard?date=${date}`);
+        if (data.next_refresh_at) {
+          const nextRefreshMs = data.next_refresh_at * 1000;
+          const now = Date.now();
+          const intervalMs = nextRefreshMs - now;
+          if (intervalMs > 0 && intervalMs < 30 * 60 * 1000) {
+            clearInterval(bsScoreboardAutoRefreshInterval);
+            startBSScoreboardAutoRefresh(date, data);
+            return;
+          }
+        }
+        renderBSTodayGames(data.games, data);
+      } catch (e) {
+        console.error('BS scoreboard auto-refresh failed:', e);
+      }
+    }, refreshInterval);
+  }
+
+  function stopBSScoreboardAutoRefresh() {
+    if (bsScoreboardAutoRefreshInterval) {
+      clearInterval(bsScoreboardAutoRefreshInterval);
+      bsScoreboardAutoRefreshInterval = null;
+    }
+  }
 
   function renderBoxScore(data) {
     const tbody = $('#boxscore-results tbody');
     const meta = $('#bs-meta');
-    const top10Container = $('#bs-top10-lines');
     let metaHtml = `<span class="bs-meta-item"><strong>Game ID:</strong> ${data.game_id}</span><span class="bs-meta-item"><strong>Players:</strong> ${data.players.length}</span>`;
 
     // Display game date/time in PCT if available
@@ -1139,12 +1563,26 @@
       }
     }
 
+    // Display cache metadata
+    if (data.generated_at) {
+      const genTime = new Date(data.generated_at * 1000);
+      metaHtml += `<span class="bs-meta-item">Updated: ${genTime.toLocaleTimeString()}</span>`;
+    }
+    if (data.expires_at && !data.is_final) {
+      const expTime = new Date(data.expires_at * 1000);
+      const mins = Math.ceil((data.expires_at * 1000 - Date.now()) / 60000);
+      metaHtml += `<span class="bs-meta-item">Expires: ${expTime.toLocaleTimeString()} (${mins}m)</span>`;
+    }
+    if (data.is_final) {
+      metaHtml += `<span class="bs-meta-item final-badge">✓ Final (cached permanently)</span>`;
+    }
+    if (data.stale) {
+      metaHtml += `<span class="bs-meta-item stale-warning">⚠ Showing stale data</span>`;
+    }
+
     meta.innerHTML = metaHtml;
 
     bsOriginalPlayersData = data.players || [];
-
-    // Render Top 10 Lines of the Day
-    renderTop10Lines(bsOriginalPlayersData);
 
     // If My Team filter is active, fetch My Team box score
     if (bsMyTeamFilterActive) {
@@ -1153,6 +1591,100 @@
       bsPlayersData = bsOriginalPlayersData;
       sortAndRenderBoxScore();
     }
+
+    // Start auto-refresh for live box score updates based on next_refresh_at
+    if (data.game_id) {
+      startBoxScoreAutoRefresh(data.game_id, data);
+    }
+  }
+
+  // Load daily top 10 for a specific date
+  async function loadDailyTop10(date) {
+    const top10Container = $('#bs-top10-lines');
+    const metaEl = $('#bs-top10-meta');
+    if (!top10Container) return;
+
+    try {
+      const data = await api(`/api/daily-top10?date=${date}`);
+      renderDailyTop10Lines(data.top10, date, data);
+      // Start auto-refresh for daily top 10
+      startDailyTop10AutoRefresh(date, data);
+    } catch (e) {
+      console.error('Failed to load daily top 10:', e);
+      top10Container.style.display = 'none';
+    }
+  }
+
+  function renderDailyTop10Lines(top10, date, meta) {
+    const top10Container = $('#bs-top10-lines');
+    const metaEl = $('#bs-top10-meta');
+    if (!top10Container) return;
+
+    if (!top10.length) {
+      top10Container.style.display = 'none';
+      return;
+    }
+
+    top10Container.style.display = 'block';
+
+    // Display cache metadata
+    if (metaEl && meta) {
+      let metaHtml = '';
+      if (meta.generated_at) {
+        const genTime = new Date(meta.generated_at * 1000);
+        metaHtml += `<span class="sb-meta-item">Updated: ${genTime.toLocaleTimeString()}</span>`;
+      }
+      if (meta.next_refresh_at) {
+        const nextTime = new Date(meta.next_refresh_at * 1000);
+        const mins = Math.ceil((meta.next_refresh_at * 1000 - Date.now()) / 60000);
+        metaHtml += `<span class="sb-meta-item">Next refresh: ${nextTime.toLocaleTimeString()} (${mins}m)</span>`;
+      }
+      if (meta.stale) {
+        metaHtml += `<span class="sb-meta-item stale-warning">⚠ Showing stale data</span>`;
+      }
+      metaEl.innerHTML = metaHtml;
+    }
+
+    const rowsHtml = top10.map((p, idx) => {
+      const pos = p.position || p.pos || '';
+      const posBadge = pos ? `<span class="pos-badge pos-${pos.toLowerCase()}">${pos}</span>` : '';
+      const fgVal = p.fga > 0 ? (p.fgm/p.fga * 100) : 0;
+      const fg3Val = p.fg3a > 0 ? (p.fg3m/p.fg3a * 100) : 0;
+      const ftVal = p.fta > 0 ? (p.ftm/p.fta * 100) : 0;
+      const usage = p.usage_pct !== undefined ? p.usage_pct : 0;
+
+      return `
+        <div class="bs-top10-row">
+          <div class="bs-top10-rank">#${idx + 1}</div>
+          <div class="bs-top10-player">
+            <div class="bs-top10-name">${p.name} ${posBadge}</div>
+            <div class="bs-top10-team">${p.team}</div>
+          </div>
+          <div class="bs-top10-stats">
+            <span>${p.min} min</span>
+            <span>${p.pts} PTS</span>
+            <span>${p.reb} REB</span>
+            <span>${p.ast} AST</span>
+            <span>${p.stl} STL</span>
+            <span>${p.blk} BLK</span>
+            <span>${p.tov} TOV</span>
+            <span>${fgVal.toFixed(1)}% FG</span>
+            <span>${fg3Val.toFixed(1)}% 3P</span>
+            <span>${ftVal.toFixed(1)}% FT</span>
+            <span>${usage.toFixed(1)}% USG</span>
+            <span class="bs-top10-fps">${fmt(p.fps || 0)} FPS</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    top10Container.innerHTML = `
+      <div class="bs-top10-header">
+        <h3>🏆 Top 10 Lines of the Day</h3>
+        <p class="bs-top10-sub">Highest fantasy point performances across all games today</p>
+      </div>
+      <div class="bs-top10-list">${rowsHtml}</div>
+    `;
   }
 
   function renderTop10Lines(players) {
@@ -1176,6 +1708,7 @@
       const fgVal = p.fga > 0 ? (p.fgm/p.fga * 100) : 0;
       const fg3Val = p.fg3a > 0 ? (p.fg3m/p.fg3a * 100) : 0;
       const ftVal = p.fta > 0 ? (p.ftm/p.fta * 100) : 0;
+      const usage = p.usage_pct !== undefined ? p.usage_pct : 0;
 
       return `
         <div class="bs-top10-row">
@@ -1195,6 +1728,7 @@
             <span>${fgVal.toFixed(1)}% FG</span>
             <span>${fg3Val.toFixed(1)}% 3P</span>
             <span>${ftVal.toFixed(1)}% FT</span>
+            <span>${usage.toFixed(1)}% USG</span>
             <span class="bs-top10-fps">${fmt(p.fps || 0)} FPS</span>
           </div>
         </div>
@@ -1309,6 +1843,56 @@
       </tr>
     `;
     }).join('');
+  }
+
+  // Auto-refresh box score based on next_refresh_at from metadata
+  function startBoxScoreAutoRefresh(gameId, meta) {
+    if (bsAutoRefreshInterval) {
+      clearInterval(bsAutoRefreshInterval);
+    }
+
+    // If game is final, don't auto-refresh
+    if (meta?.is_final) {
+      return;
+    }
+
+    // Calculate next refresh time from metadata, default to 3 minutes
+    let refreshInterval = 3 * 60 * 1000; // default 3 minutes
+    if (meta?.next_refresh_at) {
+      const nextRefreshMs = meta.next_refresh_at * 1000;
+      const now = Date.now();
+      const intervalMs = nextRefreshMs - now;
+      if (intervalMs > 0 && intervalMs < 10 * 60 * 1000) { // cap at 10 minutes
+        refreshInterval = intervalMs;
+      }
+    }
+
+    bsAutoRefreshInterval = setInterval(async () => {
+      try {
+        const data = await api(`/api/boxscore/${gameId}`);
+        // Update next refresh interval based on new metadata
+        if (data.next_refresh_at && !data.is_final) {
+          const nextRefreshMs = data.next_refresh_at * 1000;
+          const now = Date.now();
+          const intervalMs = nextRefreshMs - now;
+          if (intervalMs > 0 && intervalMs < 10 * 60 * 1000) {
+            clearInterval(bsAutoRefreshInterval);
+            startBoxScoreAutoRefresh(gameId, data);
+            return;
+          }
+        }
+        renderBoxScore(data);
+      } catch (e) {
+        console.error('Auto-refresh failed:', e);
+      }
+    }, refreshInterval);
+  }
+
+  function stopBoxScoreAutoRefresh() {
+    if (bsAutoRefreshInterval) {
+      clearInterval(bsAutoRefreshInterval);
+      bsAutoRefreshInterval = null;
+    }
   }
 
   // Global for scoreboard onclick
@@ -1540,6 +2124,306 @@
       : $('#rk-period').value;
     downloadCSV(csv, `player-rankings-${fnamePeriod}-${$('#rk-season').value}.csv`);
   }
+
+  // ===================================================================
+  // Buy Low / Sell High
+  // ===================================================================
+  let blshSellData = [];
+  let blshBuyData = [];
+  let blshSortBy = 'diff_pct';
+  let blshSortDir = 'desc'; // desc for sell high (biggest overperformers), asc for buy low (biggest underperformers)
+  let blshSearchTerm = '';
+
+  // Show/hide the custom date-range inputs when the period changes
+  $('#blsh-period')?.addEventListener('change', () => {
+    const custom = $('#blsh-custom-range');
+    if ($('#blsh-period').value !== 'custom') {
+      custom.hidden = true;
+    } else {
+      custom.hidden = false;
+      // Pre-fill with the last 30 days if blank
+      const today = new Date();
+      const iso = (d) => d.toISOString().slice(0, 10);
+      if (!$('#blsh-start-date').value) {
+        const start = new Date(today);
+        start.setDate(start.getDate() - 30);
+        $('#blsh-start-date').value = iso(start);
+      }
+      if (!$('#blsh-end-date').value) {
+        $('#blsh-end-date').value = iso(today);
+      }
+    }
+  });
+
+  // Populate team filter dropdown
+  async function populateBLSTeams() {
+    try {
+      const teams = await api('/api/teams');
+      const select = $('#blsh-team');
+      if (select) {
+        // Clear existing options except "All Teams"
+        select.innerHTML = '<option value="">All Teams</option>';
+        teams.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.abbreviation;
+          opt.textContent = t.abbreviation;
+          select.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to load teams for BLSH filter', e);
+    }
+  }
+
+  // Live search for BLSH
+  $('#blsh-search')?.addEventListener('input', (e) => {
+    blshSearchTerm = e.target.value.trim().toLowerCase();
+    renderBLSH();
+  });
+
+  $('#blsh-load')?.addEventListener('click', async () => {
+    const period = $('#blsh-period').value;
+    const season = $('#blsh-season').value;
+    const minGames = parseInt($('#blsh-min-games').value, 10);
+    const minFps = parseFloat($('#blsh-min-fps').value);
+    const team = $('#blsh-team').value;
+    const startDate = $('#blsh-start-date').value;
+    const endDate = $('#blsh-end-date').value;
+
+    const sellTbody = $('#blsh-sell-tbody');
+    const buyTbody = $('#blsh-buy-tbody');
+    const meta = $('#blsh-meta');
+    const wrap = $('#buysell-results');
+    show(wrap);
+
+    sellTbody.innerHTML = '<tr><td colspan="8" class="loading">Loading analysis…</td></tr>';
+    buyTbody.innerHTML = '<tr><td colspan="8" class="loading">Loading analysis…</td></tr>';
+    meta.textContent = '';
+
+    try {
+      let url = `/api/buy-low-sell-high?period=${encodeURIComponent(period)}&season=${encodeURIComponent(season)}&min_games=${minGames}&min_fps=${minFps}`;
+      if (team) url += `&team=${encodeURIComponent(team)}`;
+      if (period === 'custom') {
+        if (!startDate || !endDate) {
+          sellTbody.innerHTML = '<tr><td colspan="8" class="empty">Please select a start and end date for the custom range</td></tr>';
+          buyTbody.innerHTML = '<tr><td colspan="8" class="empty">Please select a start and end date for the custom range</td></tr>';
+          return;
+        }
+        url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
+      }
+
+      // Poll for warming like rankings
+      const data = await fetchRankingsWithPoll(url);
+      blshSellData = data.sell_high || [];
+      blshBuyData = data.buy_low || [];
+
+      meta.textContent = `Period: ${data.period_label || period} | Season: ${season} | Min Games: ${minGames} | Min Season FPS: ${minFps} | Sell High: ${blshSellData.length} | Buy Low: ${blshBuyData.length}`;
+      renderBLSH();
+    } catch (e) {
+      sellTbody.innerHTML = '<tr><td colspan="8" class="empty">Failed to load analysis</td></tr>';
+      buyTbody.innerHTML = '<tr><td colspan="8" class="empty">Failed to load analysis</td></tr>';
+      console.error(e);
+    }
+  });
+
+  function renderBLSH() {
+    const sellTbody = $('#blsh-sell-tbody');
+    const buyTbody = $('#blsh-buy-tbody');
+    const meta = $('#blsh-meta');
+
+    // Filter by search term
+    let sellFiltered = blshSellData;
+    let buyFiltered = blshBuyData;
+
+    if (blshSearchTerm) {
+      sellFiltered = blshSellData.filter(p => {
+        const name = (p.name || '').toLowerCase();
+        const tokens = name.split(/[\s'-]+/).filter(Boolean);
+        return tokens.some(t => t.startsWith(blshSearchTerm));
+      });
+      buyFiltered = blshBuyData.filter(p => {
+        const name = (p.name || '').toLowerCase();
+        const tokens = name.split(/[\s'-]+/).filter(Boolean);
+        return tokens.some(t => t.startsWith(blshSearchTerm));
+      });
+    }
+
+    // Sort Sell High: by diff_pct descending (default), then can be toggled
+    const sellSorted = [...sellFiltered].sort((a, b) => {
+      const va = a[blshSortBy] ?? 0;
+      const vb = b[blshSortBy] ?? 0;
+      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      return blshSortDir === 'desc' ? -cmp : cmp;
+    });
+
+    // Sort Buy Low: by diff_pct ascending (most negative first)
+    // But respect current sort if user clicked a column
+    const buySorted = [...buyFiltered].sort((a, b) => {
+      const va = a[blshSortBy] ?? 0;
+      const vb = b[blshSortBy] ?? 0;
+      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      // For Buy Low, default is ascending (most negative diff_pct first)
+      // But if user sorted by another column, use the current direction
+      if (blshSortBy === 'diff_pct' && blshSortDir === 'desc') {
+        return -cmp; // Override to ascending for diff_pct
+      }
+      return blshSortDir === 'desc' ? -cmp : cmp;
+    });
+
+    // Render Sell High
+    if (!sellSorted.length) {
+      sellTbody.innerHTML = '<tr><td colspan="8" class="empty">No Sell High candidates</td></tr>';
+    } else {
+      sellTbody.innerHTML = sellSorted.map((p, idx) => {
+        const diffClass = p.diff > 0 ? 'good' : 'bad';
+        const diffPctClass = p.diff_pct > 0 ? 'good' : 'bad';
+        const profileUrl = `/player/${p.player_id}` || '#';
+        return `
+        <tr>
+          <td class="blsh-rank num">${idx + 1}</td>
+          <td class="player-name"><a href="${profileUrl}" class="player-link">${p.name}</a></td>
+          <td class="team-abbr">${p.team}</td>
+          <td class="blsh-gms num">${p.games}</td>
+          <td class="num">${fmt(p.season_fps)}</td>
+          <td class="num">${fmt(p.period_fps)}</td>
+          <td class="blsh-diff num ${diffClass}">${signed(p.diff)}</td>
+          <td class="blsh-pct num ${diffPctClass}">${signed(p.diff_pct)}%</td>
+        </tr>
+      `;
+      }).join('');
+    }
+
+    // Render Buy Low
+    if (!buySorted.length) {
+      buyTbody.innerHTML = '<tr><td colspan="8" class="empty">No Buy Low candidates</td></tr>';
+    } else {
+      buyTbody.innerHTML = buySorted.map((p, idx) => {
+        const diffClass = p.diff > 0 ? 'good' : 'bad';
+        const diffPctClass = p.diff_pct > 0 ? 'good' : 'bad';
+        const profileUrl = `/player/${p.player_id}` || '#';
+        return `
+        <tr>
+          <td class="blsh-rank num">${idx + 1}</td>
+          <td class="player-name"><a href="${profileUrl}" class="player-link">${p.name}</a></td>
+          <td class="team-abbr">${p.team}</td>
+          <td class="blsh-gms num">${p.games}</td>
+          <td class="num">${fmt(p.season_fps)}</td>
+          <td class="num">${fmt(p.period_fps)}</td>
+          <td class="blsh-diff num ${diffClass}">${signed(p.diff)}</td>
+          <td class="blsh-pct num ${diffPctClass}">${signed(p.diff_pct)}%</td>
+        </tr>
+      `;
+      }).join('');
+    }
+
+    // Update meta with filtered counts
+    if (meta) {
+      meta.textContent = meta.textContent.replace(/\s*\|\s*Showing \d+ of \d+ players$/, '');
+      if (blshSearchTerm) {
+        meta.textContent += ` | Showing ${sellSorted.length} Sell / ${buySorted.length} Buy of ${blshSellData.length} / ${blshBuyData.length}`;
+      }
+    }
+  }
+
+  // Sorting for BLSH tables
+  function setupBLSHSorting() {
+    // Sell High table
+    $$('.th-sort', $('#blsh-sell-table')).forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (blshSortBy === key) {
+          blshSortDir = blshSortDir === 'desc' ? 'asc' : 'desc';
+        } else {
+          blshSortBy = key;
+          blshSortDir = 'desc'; // Default desc for new column
+        }
+        // Update visual indicators for both tables
+        $$('.th-sort', $('#blsh-sell-table')).forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        $$('.th-sort', $('#blsh-buy-table')).forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(blshSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+        // Also update corresponding header in buy table
+        const buyTh = $(`.th-sort[data-sort="${key}"]`, $('#blsh-buy-table'));
+        if (buyTh) buyTh.classList.add(blshSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+        renderBLSH();
+      });
+    });
+
+    // Buy Low table
+    $$('.th-sort', $('#blsh-buy-table')).forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (blshSortBy === key) {
+          blshSortDir = blshSortDir === 'desc' ? 'asc' : 'desc';
+        } else {
+          blshSortBy = key;
+          blshSortDir = 'desc'; // Default desc for new column
+        }
+        // Update visual indicators for both tables
+        $$('.th-sort', $('#blsh-sell-table')).forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        $$('.th-sort', $('#blsh-buy-table')).forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(blshSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+        // Also update corresponding header in sell table
+        const sellTh = $(`.th-sort[data-sort="${key}"]`, $('#blsh-sell-table'));
+        if (sellTh) sellTh.classList.add(blshSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+        renderBLSH();
+      });
+    });
+  }
+
+  // Export BLSH to CSV
+  $('#blsh-export')?.addEventListener('click', () => {
+    if (!blshSellData.length && !blshBuyData.length) return alert('Load analysis first');
+    exportBLSHCSV();
+  });
+
+  function exportBLSHCSV() {
+    const period = $('#blsh-period').value;
+    const season = $('#blsh-season').value;
+    const startDate = $('#blsh-start-date').value;
+    const endDate = $('#blsh-end-date').value;
+
+    // Export Sell High
+    const sellHeaders = ['Rank', 'Player', 'Team', 'Gms', 'Season FPS', 'Period FPS', 'Diff', 'Diff %'];
+    const sellRows = blshSellData.map((p, idx) => [
+      idx + 1,
+      p.name,
+      p.team,
+      p.games,
+      fmt(p.season_fps),
+      fmt(p.period_fps),
+      fmt(p.diff, 1),
+      fmt(p.diff_pct, 1) + '%'
+    ]);
+    const sellCSV = [sellHeaders.join(','), ...sellRows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+
+    // Export Buy Low
+    const buyHeaders = ['Rank', 'Player', 'Team', 'Gms', 'Season FPS', 'Period FPS', 'Diff', 'Diff %'];
+    const buyRows = blshBuyData.map((p, idx) => [
+      idx + 1,
+      p.name,
+      p.team,
+      p.games,
+      fmt(p.season_fps),
+      fmt(p.period_fps),
+      fmt(p.diff, 1),
+      fmt(p.diff_pct, 1) + '%'
+    ]);
+    const buyCSV = [buyHeaders.join(','), ...buyRows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+
+    const fnamePeriod = period === 'custom'
+      ? `${startDate}_${endDate}`
+      : period;
+
+    // Create two separate files
+    downloadCSV(sellCSV, `buy-low-sell-high-sell-${fnamePeriod}-${season}.csv`);
+    setTimeout(() => {
+      downloadCSV(buyCSV, `buy-low-sell-high-buy-${fnamePeriod}-${season}.csv`);
+    }, 100);
+  }
+
+  // Call setupBLSHSorting after DOM is ready
+  setupBLSHSorting();
+  populateBLSTeams();
 
   // ===================================================================
   // Start/Sit
@@ -2408,6 +3292,9 @@
   updateMyTeamCountDisplays();
   renderMyTeamHub();
 
+  // Initialize refresh status polling
+  initRefreshStatusPolling();
+
   // Add Player button handlers
   $('#my-team-add-btn')?.addEventListener('click', openAddPlayerModal);
   $('#my-team-add-btn-page')?.addEventListener('click', openAddPlayerModal);
@@ -2416,6 +3303,16 @@
   // Watch for page activation
   const originalActivatePage = activatePage;
   activatePage = function(pageId) {
+    // Stop box score auto-refresh when navigating away from boxscore
+    if (pageId !== 'boxscore') {
+      stopBoxScoreAutoRefresh();
+      stopBSScoreboardAutoRefresh();
+      stopDailyTop10AutoRefresh();
+    }
+    // Stop scoreboard auto-refresh when navigating away from hub
+    if (pageId !== 'hub') {
+      stopScoreboardAutoRefresh();
+    }
     originalActivatePage(pageId);
     if (pageId === 'my-team') {
       renderMyTeamPage();
@@ -2431,6 +3328,11 @@
           sortAndRenderBoxScore();
         }
       });
+      // Load daily top 10 for the current date in the date picker
+      const bsDateInput = $('#bs-scoreboard-date');
+      if (bsDateInput && bsDateInput.value) {
+        loadDailyTop10(bsDateInput.value);
+      }
     }
     // Add My Team filter button to Start/Sit page
     if (pageId === 'startsit') {

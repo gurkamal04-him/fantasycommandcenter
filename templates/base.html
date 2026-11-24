@@ -98,6 +98,15 @@
         <span class="brand-mark">▲</span>
         <span class="brand-text">Fantasy Command Center</span>
       </a>
+      <!-- Refresh status indicator -->
+      <div id="refresh-status-indicator" class="refresh-status-indicator refresh-status-ok" aria-live="polite" style="margin-left: auto; padding: 4px 12px; font-size: 11px; border-radius: 4px; background: var(--surface-2, #232a33); border: 1px solid var(--line, #2a313b); min-width: 180px; text-align: right;">
+        Initializing…
+      </div>
+      <!-- Manual refresh buttons -->
+      <div id="manual-refresh-buttons" style="margin-left: 12px; display: flex; gap: 8px; align-items: center;">
+        <button id="manual-refresh-live" class="btn btn-ghost" style="font-size: 11px; padding: 4px 10px;" title="Trigger immediate live data refresh (scoreboard, box scores)">Refresh Live</button>
+        <button id="manual-refresh-daily" class="btn btn-ghost" style="font-size: 11px; padding: 4px 10px;" title="Trigger immediate daily refresh (rankings, schedules, top 10)">Refresh Daily</button>
+      </div>
       <nav class="main-nav" aria-label="Main navigation">
         <ul class="nav-list">
           <li class="nav-search">
@@ -111,6 +120,7 @@
           <li><a href="/#trade" class="nav-link" data-page="trade">Trade Analyzer</a></li>
           <li><a href="/#projector" class="nav-link" data-page="projector">Win Projector</a></li>
           <li><a href="/#rankings" class="nav-link" data-page="rankings">Rankings</a></li>
+          <li><a href="/#buysell" class="nav-link" data-page="buysell">Buy Low / Sell High</a></li>
           <li><a href="/#my-team" class="nav-link" data-page="my-team">My Team</a></li>
         </ul>
       </nav>

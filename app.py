@@ -23,6 +23,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 300
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # =====================================================================
 # Playoff Schedule Data (Weeks 20-22)
@@ -102,7 +103,7 @@ _RANKINGS_WARMING: set = set()
 _RANKINGS_ERROR: Dict[str, str] = {}
 
 # Common periods to keep warm so switching the dropdown is instant.
-_RK_COMMON_PERIODS = ('season', '2weeks', '1week')
+_RK_COMMON_PERIODS = ('season', '2weeks', '1week', '1month')
 
 # Readiness flag: set to True once the initial warm-up finishes. The
 # frontend polls /api/ready and only removes the "Please Wait" overlay once
@@ -115,6 +116,128 @@ _LOAD_PROGRESS = 0
 _LOAD_START_TIME = None
 _LOAD_STAGE = "initializing"
 _LOAD_STAGE_LOCK = threading.Lock()
+
+# =====================================================================
+# TTL Cache Helper Class
+# =====================================================================
+class TTLCache:
+    """Thread-safe cache with TTL and stale-while-revalidate support."""
+
+    def __init__(self, max_entries: int, default_ttl: int):
+        self._data = {}  # key -> (value, fetched_at, expires_at, is_final)
+        self._lock = threading.Lock()
+        self.max_entries = max_entries
+        self.default_ttl = default_ttl
+
+    def _now(self):
+        return time.time()
+
+    def get(self, key: str, stale_ok: bool = False) -> Tuple[Any, bool, Optional[float], Optional[float], bool]:
+        """
+        Get value from cache.
+        Returns: (value, is_stale, fetched_at, expires_at, is_final)
+        """
+        with self._lock:
+            if key not in self._data:
+                return None, True, None, None, False
+            value, fetched_at, expires_at, is_final = self._data[key]
+            now = self._now()
+            is_stale = now >= expires_at if expires_at else False
+            if is_stale and not stale_ok:
+                return None, True, fetched_at, expires_at, is_final
+            return value, is_stale, fetched_at, expires_at, is_final
+
+    def set(self, key: str, value: Any, ttl: Optional[int] = None, is_final: bool = False) -> None:
+        """Set value in cache with TTL. If is_final=True, never expires."""
+        with self._lock:
+            # Evict oldest if at capacity
+            if len(self._data) >= self.max_entries:
+                oldest_key = min(self._data.keys(), key=lambda k: self._data[k][1])
+                del self._data[oldest_key]
+
+            now = self._now()
+            if is_final:
+                expires_at = None  # Never expires
+            else:
+                expires_at = now + (ttl if ttl is not None else self.default_ttl)
+            self._data[key] = (value, now, expires_at, is_final)
+
+    def invalidate(self, key: str) -> bool:
+        """Remove a specific key from cache. Returns True if key existed."""
+        with self._lock:
+            if key in self._data:
+                del self._data[key]
+                return True
+            return False
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        with self._lock:
+            self._data.clear()
+
+    def get_metadata(self, key: str) -> Optional[Dict]:
+        """Get cache metadata without the value."""
+        with self._lock:
+            if key not in self._data:
+                return None
+            value, fetched_at, expires_at, is_final = self._data[key]
+            return {
+                'fetched_at': fetched_at,
+                'expires_at': expires_at,
+                'is_final': is_final,
+                'is_stale': (self._now() >= expires_at) if expires_at else False
+            }
+
+    def get_all_keys(self) -> List[str]:
+        with self._lock:
+            return list(self._data.keys())
+
+
+# =====================================================================
+# Global Cache Instances & Refresh State
+# =====================================================================
+# Scoreboard cache (LIVE job) - 15 min TTL
+_SCOREBOARD_CACHE = TTLCache(max_entries=100, default_ttl=900)  # 15 min
+
+# Daily Top-10 cache (LIVE job) - 15 min TTL
+_TOP10_CACHE = TTLCache(max_entries=50, default_ttl=900)
+
+# Box score cache - updated by both jobs, TTL varies by game status
+# 900s (15 min) for live games, permanent for final
+_BOX_SCORE_TTL_CACHE = TTLCache(max_entries=5000, default_ttl=900)
+
+# Rankings cache (DAILY job) - permanent, refreshed daily
+_RANKINGS_TTL_CACHE = TTLCache(max_entries=50, default_ttl=0)  # 0 = no auto-expiry, manual refresh only
+
+# Base data cache (teams, players) - refreshed daily
+_BASE_DATA_CACHE = TTLCache(max_entries=100, default_ttl=86400)  # 24 hours
+
+# Refresh job state tracking
+_REFRESH_LOCK = threading.Lock()  # Prevents concurrent job execution
+_REFRESH_STATE = {
+    'live': {
+        'last_run': None,
+        'next_run': None,
+        'status': 'idle',  # idle, running, success, error
+        'error': None,
+        'backoff_until': 0,
+        'backoff_seconds': 900,  # Initial backoff: 15 min
+    },
+    'daily': {
+        'last_run': None,
+        'next_run': None,
+        'status': 'idle',
+        'error': None,
+        'backoff_until': 0,
+        'backoff_seconds': 900,
+    }
+}
+
+# Daily epoch for player profile lazy invalidation
+_PLAYER_PROFILE_EPOCH = 0
+_PLAYER_PROFILE_EPOCH_LOCK = threading.Lock()
+
+PT_ZONE = ZoneInfo("America/Los_Angeles")
 
 
 def set_ready() -> None:
@@ -170,6 +293,354 @@ def set_load_progress(progress: int, stage: str = "") -> None:
 
 def _rk_key(period: str, season: str, start_date: str, end_date: str) -> str:
     return f"{period}|{season}|{start_date}|{end_date}"
+
+
+# =====================================================================
+# Background Refresh Scheduler
+# =====================================================================
+
+def _get_pt_now() -> datetime:
+    """Get current time in Pacific Time."""
+    return datetime.now(PT_ZONE)
+
+
+def _get_next_live_run() -> datetime:
+    """Calculate next 15-minute boundary (e.g., :00, :15, :30, :45)."""
+    now = _get_pt_now()
+    minute = now.minute
+    next_boundary = ((minute // 15) + 1) * 15
+    if next_boundary >= 60:
+        next_boundary = 0
+        next_run = now.replace(hour=now.hour + 1, minute=next_boundary, second=0, microsecond=0)
+    else:
+        next_run = now.replace(minute=next_boundary, second=0, microsecond=0)
+    return next_run
+
+
+def _get_next_daily_run() -> datetime:
+    """Calculate next 4 AM PT run."""
+    now = _get_pt_now()
+    next_run = now.replace(hour=4, minute=0, second=0, microsecond=0)
+    if next_run <= now:
+        next_run += timedelta(days=1)
+    return next_run
+
+
+def _update_backoff(job_type: str, success: bool) -> None:
+    """Update exponential backoff for a job."""
+    state = _REFRESH_STATE[job_type]
+    if success:
+        state['backoff_seconds'] = 900  # Reset to 15 min
+        state['backoff_until'] = 0
+    else:
+        # Exponential backoff: 900 -> 1800 -> 3600 (cap)
+        state['backoff_seconds'] = min(state['backoff_seconds'] * 2, 3600)
+        state['backoff_until'] = time.time() + state['backoff_seconds']
+
+
+def _should_run_job(job_type: str) -> bool:
+    """Check if job should run (not in backoff, not already running)."""
+    state = _REFRESH_STATE[job_type]
+    if state['status'] == 'running':
+        return False
+    if state['backoff_until'] > time.time():
+        return False
+    return True
+
+
+def _fetch_scoreboard_with_retry(date_str: str) -> Optional[Dict]:
+    """Fetch scoreboard from ESPN with retry logic. Raises on failure."""
+    espn_date = date_str.replace('-', '')
+    espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
+
+    for attempt in range(3):
+        try:
+            resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
+            if resp.status_code in (403, 429):
+                raise RuntimeError(f"ESPN scoreboard HTTP {resp.status_code}")
+            resp.raise_for_status()
+            data = resp.json()
+
+            games = []
+            for event in data.get('events', []):
+                competition = event['competitions'][0]
+                home = competition['competitors'][0]
+                away = competition['competitors'][1]
+                games.append({
+                    'gameId': event.get('id'),
+                    'nbaGameId': espn_to_nba_id(event.get('id', '')),
+                    'home': {
+                        'teamId': home.get('id'),
+                        'teamTricode': home['team']['abbreviation'],
+                        'teamCity': home['team'].get('location', ''),
+                        'teamName': home['team'].get('name', ''),
+                        'score': int(home.get('score', 0)),
+                        'wins': int(home.get('wins', 0)),
+                        'losses': int(home.get('losses', 0)),
+                    },
+                    'away': {
+                        'teamId': away.get('id'),
+                        'teamTricode': away['team']['abbreviation'],
+                        'teamCity': away['team'].get('location', ''),
+                        'teamName': away['team'].get('name', ''),
+                        'score': int(away.get('score', 0)),
+                        'wins': int(away.get('wins', 0)),
+                        'losses': int(away.get('losses', 0)),
+                    },
+                    'gameStatus': event['status']['type']['description'],
+                    'gameStatusText': event['status']['type'].get('detail', ''),
+                    'gameEt': (lambda d: (lambda dt: dt.isoformat().replace('+00:00', 'Z') if dt else d)(datetime.fromisoformat(d.replace('Z', '+00:00')) + timedelta(hours=1)) if d else d)(event.get('date', '')),
+                    'period': event['status'].get('period', 0),
+                    'gameCode': event.get('shortName', ''),
+                })
+            return {'date': date_str, 'games': games, 'source': 'espn'}
+        except RuntimeError:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            raise
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            raise
+    return None
+
+
+def _is_game_final(game_status: str) -> bool:
+    """Check if game is final/completed."""
+    status_lower = game_status.lower()
+    return any(kw in status_lower for kw in ['final', 'completed', 'postponed', 'canceled'])
+
+
+def _fetch_box_score_with_retry(game_id: str) -> Optional[Dict]:
+    """Fetch box score with retry, raises on 403/429."""
+    for attempt in range(3):
+        try:
+            result = get_espn_box_score(game_id)
+            if result.get('players'):
+                return result
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            return result
+        except Exception:
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
+                continue
+            raise
+    return None
+
+
+def _run_live_refresh() -> None:
+    """LIVE job: fetch scoreboard, box scores for live games, rebuild daily top-10."""
+    global _PLAYER_PROFILE_EPOCH
+
+    date_str = _get_pt_now().date().isoformat()
+    now_ts = time.time()
+
+    try:
+        # 1. Fetch scoreboard
+        scoreboard_data = _fetch_scoreboard_with_retry(date_str)
+        if not scoreboard_data:
+            raise RuntimeError("Empty scoreboard")
+
+        games = scoreboard_data.get('games', [])
+
+        # 2. Determine TTL for scoreboard cache (15 min)
+        next_refresh = _get_next_live_run().timestamp()
+        _SCOREBOARD_CACHE.set('scoreboard', scoreboard_data, ttl=900)
+
+        # 3. Fetch box scores for ALL games (live + final) to rebuild daily top-10,
+        # but only track live game count for the 'games' field.
+        all_players = []
+        live_game_ids = []
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = {}
+            for game in games:
+                game_id = game.get('gameId')
+                if not game_id:
+                    continue
+                game_status = game.get('gameStatus', '')
+                is_final = _is_game_final(game_status)
+
+                if not is_final:
+                    live_game_ids.append(game_id)
+
+                # Fetch box scores for ALL games (not just live) to build top-10
+                futures[executor.submit(_fetch_box_score_with_retry, game_id)] = (game_id, is_final)
+
+            for future in as_completed(futures):
+                game_id, is_final = futures[future]
+                try:
+                    box_data = future.result()
+                    if box_data and box_data.get('players'):
+                        # Cache box score with appropriate TTL
+                        ttl = None if is_final else 900  # Permanent for final, 15 min for live
+                        _BOX_SCORE_TTL_CACHE.set(f"box_{game_id}", box_data, ttl=ttl, is_final=is_final)
+
+                        # Collect players for top-10
+                        for player in box_data['players']:
+                            fps = calc_fps(player)
+                            usage = calc_usage_pct(player)
+                            min_played = player.get('minutes', player.get('MIN', 0))
+                            if min_played and min_played > 0:
+                                all_players.append({
+                                    'player_id': player.get('playerId', ''),
+                                    'name': player.get('playerName', ''),
+                                    'team': player.get('team', ''),
+                                    'position': player.get('position', ''),
+                                    'min': min_played,
+                                    'pts': player.get('pts', player.get('points', 0)),
+                                    'reb': player.get('reb', player.get('rebounds', player.get('reboundsTotal', 0))),
+                                    'ast': player.get('ast', player.get('assists', 0)),
+                                    'stl': player.get('stl', player.get('steals', 0)),
+                                    'blk': player.get('blk', player.get('blocks', 0)),
+                                    'tov': player.get('tov', player.get('turnovers', 0)),
+                                    'fps': round(fps, 1),
+                                    'usage_pct': round(usage, 1),
+                                })
+                except Exception as e:
+                    print(f"Error fetching box score for game {game_id}: {e}")
+
+        # 4. Rebuild daily top-10
+        all_players.sort(key=lambda x: x['fps'], reverse=True)
+        top10 = all_players[:10]
+        _TOP10_CACHE.set(f'top10_{date_str}', {'date': date_str, 'top10': top10, 'games': len(live_game_ids)}, ttl=900)
+
+        # 5. Increment player profile epoch for lazy invalidation
+        with _PLAYER_PROFILE_EPOCH_LOCK:
+            _PLAYER_PROFILE_EPOCH += 1
+
+        # Update state
+        _REFRESH_STATE['live']['last_run'] = now_ts
+        _REFRESH_STATE['live']['next_run'] = next_refresh
+        _REFRESH_STATE['live']['status'] = 'success'
+        _REFRESH_STATE['live']['error'] = None
+        _update_backoff('live', True)
+
+    except Exception as e:
+        _REFRESH_STATE['live']['last_run'] = now_ts
+        _REFRESH_STATE['live']['status'] = 'error'
+        _REFRESH_STATE['live']['error'] = str(e)
+        _update_backoff('live', False)
+        print(f"LIVE refresh failed: {e}")
+
+
+def _run_daily_refresh() -> None:
+    """DAILY job: recompute rankings, refresh base data, re-fetch last 2 days box scores."""
+    global _PLAYER_PROFILE_EPOCH
+
+    now_ts = time.time()
+    today = _get_pt_now().date()
+
+    try:
+        # 1. Recompute player rankings for common periods
+        # Call __wrapped__ to bypass lru_cache
+        common_periods = [('season', ''), ('1month', ''), ('2weeks', ''), ('1week', '')]
+
+        for period, _ in common_periods:
+            key = _rk_key(period, '2026-27', '', '')
+            # Bypass lru_cache by calling __wrapped__
+            result = get_player_rankings.__wrapped__(period, '2026-27', '', '')
+            _RANKINGS_TTL_CACHE.set(key, result, is_final=True)
+            # Also update the old cache for compatibility
+            with _RANKINGS_LOCK:
+                _RANKINGS_CACHE[key] = result
+
+        # 2. Refresh base data (teams, players)
+        _BASE_DATA_CACHE.invalidate('all_teams')
+        _BASE_DATA_CACHE.invalidate('all_players')
+        # Force refresh by clearing lru_cache
+        get_all_teams.cache_clear()
+        get_all_players.cache_clear()
+        # Pre-warm
+        get_all_teams()
+        get_all_players()
+
+        # 3. Re-fetch last 2 days of box scores
+        for days_ago in [0, 1]:
+            target_date = today - timedelta(days=days_ago)
+            date_str = target_date.isoformat()
+
+            try:
+                scoreboard_data = _fetch_scoreboard_with_retry(date_str)
+                if not scoreboard_data:
+                    continue
+
+                games = scoreboard_data.get('games', [])
+
+                with ThreadPoolExecutor(max_workers=6) as executor:
+                    futures = {}
+                    for game in games:
+                        game_id = game.get('gameId')
+                        if game_id:
+                            futures[executor.submit(_fetch_box_score_with_retry, game_id)] = game_id
+
+                    for future in as_completed(futures):
+                        game_id = futures[future]
+                        try:
+                            box_data = future.result()
+                            if box_data and box_data.get('players'):
+                                _BOX_SCORE_TTL_CACHE.set(f"box_{game_id}", box_data, is_final=True)
+                        except Exception as e:
+                            print(f"Daily refresh: error fetching box score {game_id}: {e}")
+            except Exception as e:
+                print(f"Daily refresh: error fetching scoreboard for {date_str}: {e}")
+
+        # 4. Increment player profile epoch
+        with _PLAYER_PROFILE_EPOCH_LOCK:
+            _PLAYER_PROFILE_EPOCH += 1
+
+        # Update state
+        next_refresh = _get_next_daily_run().timestamp()
+        _REFRESH_STATE['daily']['last_run'] = now_ts
+        _REFRESH_STATE['daily']['next_run'] = next_refresh
+        _REFRESH_STATE['daily']['status'] = 'success'
+        _REFRESH_STATE['daily']['error'] = None
+        _update_backoff('daily', True)
+
+    except Exception as e:
+        _REFRESH_STATE['daily']['last_run'] = now_ts
+        _REFRESH_STATE['daily']['status'] = 'error'
+        _REFRESH_STATE['daily']['error'] = str(e)
+        _update_backoff('daily', False)
+        print(f"DAILY refresh failed: {e}")
+
+
+def _scheduler_loop() -> None:
+    """Background daemon thread that runs both jobs on schedule."""
+    print("Background scheduler started")
+
+    # Initialize next run times
+    _REFRESH_STATE['live']['next_run'] = _get_next_live_run().timestamp()
+    _REFRESH_STATE['daily']['next_run'] = _get_next_daily_run().timestamp()
+
+    while True:
+        try:
+            now = time.time()
+
+            # Check if we should run LIVE job (every 15 min)
+            if now >= _REFRESH_STATE['live']['next_run'] and _should_run_job('live'):
+                with _REFRESH_LOCK:
+                    if _should_run_job('live'):
+                        _REFRESH_STATE['live']['status'] = 'running'
+                        _run_live_refresh()
+
+            # Check if we should run DAILY job (4 AM PT)
+            if now >= _REFRESH_STATE['daily']['next_run'] and _should_run_job('daily'):
+                with _REFRESH_LOCK:
+                    if _should_run_job('daily'):
+                        _REFRESH_STATE['daily']['status'] = 'running'
+                        _run_daily_refresh()
+
+            # Sleep for 10 seconds before next check
+            time.sleep(10)
+
+        except Exception as e:
+            print(f"Scheduler error: {e}")
+            time.sleep(30)
 
 
 def warm_rankings(period: str = 'season', season: str = '2026-27',
@@ -306,7 +777,7 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 3945274, 'DISPLAY_FIRST_LAST': 'Luka Doncic', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'PG'},
     {'PERSON_ID': 3468, 'DISPLAY_FIRST_LAST': 'Giannis Antetokounmpo', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'PF'},
     {'PERSON_ID': 3978, 'DISPLAY_FIRST_LAST': 'Nikola Jokic', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'C'},
-    {'PERSON_ID': 3033, 'DISPLAY_FIRST_LAST': 'Kevin Durant', 'TEAM_ID': 21, 'TEAM_ABBREVIATION': 'PHX', 'POSITION': 'SF'},
+    {'PERSON_ID': 3033, 'DISPLAY_FIRST_LAST': 'Kevin Durant', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'SF'},
     {'PERSON_ID': 6430, 'DISPLAY_FIRST_LAST': 'Jayson Tatum', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
     {'PERSON_ID': 6589, 'DISPLAY_FIRST_LAST': 'Trae Young', 'TEAM_ID': 27, 'TEAM_ABBREVIATION': 'WAS', 'POSITION': 'PG'},
     {'PERSON_ID': 4278039, 'DISPLAY_FIRST_LAST': 'Anthony Edwards', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN', 'POSITION': 'SG'},
@@ -317,14 +788,13 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 4701230, 'DISPLAY_FIRST_LAST': 'Paolo Banchero', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'PF'},
     {'PERSON_ID': 4433249, 'DISPLAY_FIRST_LAST': 'Franz Wagner', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'SF'},
     {'PERSON_ID': 4278562, 'DISPLAY_FIRST_LAST': 'Jalen Brunson', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'PG'},
-    {'PERSON_ID': 4712743, 'DISPLAY_FIRST_LAST': 'Scottie Barnes', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'PF'},
+    {'PERSON_ID': 4712743, 'DISPLAY_FIRST_LAST': 'Scottie Barnes', 'TEAM_ID': 28, 'TEAM_ABBREVIATION': 'TOR', 'POSITION': 'PF'},
     {'PERSON_ID': 4432615, 'DISPLAY_FIRST_LAST': 'Tyrese Haliburton', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PG'},
     {'PERSON_ID': 4595968, 'DISPLAY_FIRST_LAST': 'Evan Mobley', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'C'},
     {'PERSON_ID': 4596317, 'DISPLAY_FIRST_LAST': 'Cade Cunningham', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'PG'},
     {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'PG'},
     {'PERSON_ID': 4278305, 'DISPLAY_FIRST_LAST': 'Ja Morant', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'PG'},
     {'PERSON_ID': 4432737, 'DISPLAY_FIRST_LAST': 'Zion Williamson', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP', 'POSITION': 'PF'},
-    {'PERSON_ID': 4346383, 'DISPLAY_FIRST_LAST': 'LaMelo Ball', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'PG'},
     {'PERSON_ID': 4595995, 'DISPLAY_FIRST_LAST': 'Jaren Jackson Jr.', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'MEM', 'POSITION': 'C'},
     {'PERSON_ID': 4681586, 'DISPLAY_FIRST_LAST': 'Alperen Sengun', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'C'},
     {'PERSON_ID': 4712744, 'DISPLAY_FIRST_LAST': 'Jalen Green', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'SG'},
@@ -343,8 +813,6 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 202704, 'DISPLAY_FIRST_LAST': 'Klay Thompson', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SG'},
     {'PERSON_ID': 203460, 'DISPLAY_FIRST_LAST': 'Jimmy Butler', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'SF'},
     {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'C'},
-    {'PERSON_ID': 203484, 'DISPLAY_FIRST_LAST': 'Bam Adebayo', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'C'},
-    {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'SG'},
     {'PERSON_ID': 1627759, 'DISPLAY_FIRST_LAST': 'Donovan Mitchell', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'SG'},
     {'PERSON_ID': 1627832, 'DISPLAY_FIRST_LAST': 'Darius Garland', 'TEAM_ID': 5, 'TEAM_ABBREVIATION': 'CLE', 'POSITION': 'PG'},
     {'PERSON_ID': 1628387, 'DISPLAY_FIRST_LAST': 'Jaylen Brown', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
@@ -352,7 +820,7 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628391, 'DISPLAY_FIRST_LAST': 'Robert Williams III', 'TEAM_ID': 16, 'TEAM_ABBREVIATION': 'MIN', 'POSITION': 'C'},
     {'PERSON_ID': 1628399, 'DISPLAY_FIRST_LAST': 'Jrue Holiday', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'PG'},
     {'PERSON_ID': 1628404, 'DISPLAY_FIRST_LAST': 'Domantas Sabonis', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'C'},
-    {'PERSON_ID': 1628427, 'DISPLAY_FIRST_LAST': 'Dejounte Murray', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'PG'},
+    {'PERSON_ID': 1628427, 'DISPLAY_FIRST_LAST': 'Dejounte Murray', 'TEAM_ID': 3, 'TEAM_ABBREVIATION': 'NOP', 'POSITION': 'PG'},
     {'PERSON_ID': 1628449, 'DISPLAY_FIRST_LAST': 'Myles Turner', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'C'},
     {'PERSON_ID': 1628464, 'DISPLAY_FIRST_LAST': 'Julius Randle', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'PF'},
     {'PERSON_ID': 1628475, 'DISPLAY_FIRST_LAST': 'Pascal Siakam', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PF'},
@@ -360,14 +828,13 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628494, 'DISPLAY_FIRST_LAST': 'Mikal Bridges', 'TEAM_ID': 18, 'TEAM_ABBREVIATION': 'NYK', 'POSITION': 'SF'},
     {'PERSON_ID': 1628500, 'DISPLAY_FIRST_LAST': 'Tyrese Maxey', 'TEAM_ID': 20, 'TEAM_ABBREVIATION': 'PHI', 'POSITION': 'PG'},
     {'PERSON_ID': 1628511, 'DISPLAY_FIRST_LAST': 'Jalen Suggs', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'PG'},
-    {'PERSON_ID': 1628522, 'DISPLAY_FIRST_LAST': 'Chet Holmgren', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'C'},
     {'PERSON_ID': 1628531, 'DISPLAY_FIRST_LAST': 'Jalen Williams', 'TEAM_ID': 25, 'TEAM_ABBREVIATION': 'OKC', 'POSITION': 'SG'},
     {'PERSON_ID': 1628542, 'DISPLAY_FIRST_LAST': 'Walker Kessler', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'C'},
+    {'PERSON_ID': 4432188, 'DISPLAY_FIRST_LAST': 'Jalen Johnson', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SF'},
     {'PERSON_ID': 1628553, 'DISPLAY_FIRST_LAST': 'Bennedict Mathurin', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'SG'},
     {'PERSON_ID': 1628564, 'DISPLAY_FIRST_LAST': 'Keegan Murray', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'PF'},
     {'PERSON_ID': 1628575, 'DISPLAY_FIRST_LAST': 'Jalen Duren', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'C'},
     {'PERSON_ID': 1628586, 'DISPLAY_FIRST_LAST': 'Tari Eason', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PF'},
-    {'PERSON_ID': 1628597, 'DISPLAY_FIRST_LAST': 'Jabari Smith Jr.', 'TEAM_ID': 10, 'TEAM_ABBREVIATION': 'HOU', 'POSITION': 'PF'},
     {'PERSON_ID': 1628608, 'DISPLAY_FIRST_LAST': 'Jeremy Sochan', 'TEAM_ID': 24, 'TEAM_ABBREVIATION': 'SAS', 'POSITION': 'PF'},
     {'PERSON_ID': 1628619, 'DISPLAY_FIRST_LAST': 'Jaden Ivey', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'SG'},
     {'PERSON_ID': 1628630, 'DISPLAY_FIRST_LAST': 'AJ Griffin', 'TEAM_ID': 17, 'TEAM_ABBREVIATION': 'BKN', 'POSITION': 'SF'},
@@ -386,7 +853,7 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628773, 'DISPLAY_FIRST_LAST': 'Ausar Thompson', 'TEAM_ID': 8, 'TEAM_ABBREVIATION': 'DET', 'POSITION': 'SF'},
     {'PERSON_ID': 1628784, 'DISPLAY_FIRST_LAST': 'Brandon Miller', 'TEAM_ID': 29, 'TEAM_ABBREVIATION': 'CHA', 'POSITION': 'SF'},
     {'PERSON_ID': 1628795, 'DISPLAY_FIRST_LAST': 'Scoot Henderson', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'PG'},
-        {'PERSON_ID': 1628817, 'DISPLAY_FIRST_LAST': 'Jarace Walker', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PF'},
+    {'PERSON_ID': 1628817, 'DISPLAY_FIRST_LAST': 'Jarace Walker', 'TEAM_ID': 11, 'TEAM_ABBREVIATION': 'IND', 'POSITION': 'PF'},
     {'PERSON_ID': 1628828, 'DISPLAY_FIRST_LAST': 'Taylor Hendricks', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'PF'},
     {'PERSON_ID': 1628839, 'DISPLAY_FIRST_LAST': 'Nick Smith Jr.', 'TEAM_ID': 14, 'TEAM_ABBREVIATION': 'MIA', 'POSITION': 'SG'},
     {'PERSON_ID': 1628850, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SG'},
@@ -407,24 +874,9 @@ _FALLBACK_PLAYERS = [
     {'PERSON_ID': 1628993, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
     {'PERSON_ID': 1629004, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SF'},
     {'PERSON_ID': 1629015, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629026, 'DISPLAY_FIRST_LAST': 'Keyonte George', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'PG'},
     {'PERSON_ID': 1629037, 'DISPLAY_FIRST_LAST': 'Brice Sensabaugh', 'TEAM_ID': 26, 'TEAM_ABBREVIATION': 'UTA', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629048, 'DISPLAY_FIRST_LAST': 'Brandin Podziemski', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'SG'},
-    {'PERSON_ID': 1629059, 'DISPLAY_FIRST_LAST': 'Trayce Jackson-Davis', 'TEAM_ID': 9, 'TEAM_ABBREVIATION': 'GSW', 'POSITION': 'PF'},
-    {'PERSON_ID': 1629070, 'DISPLAY_FIRST_LAST': 'Kobe Bufkin', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SG'},
     {'PERSON_ID': 1629081, 'DISPLAY_FIRST_LAST': 'Jalen Hood-Schifino', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'PG'},
-    {'PERSON_ID': 1629092, 'DISPLAY_FIRST_LAST': 'Maxwell Lewis', 'TEAM_ID': 13, 'TEAM_ABBREVIATION': 'LAL', 'POSITION': 'SF'},
     {'PERSON_ID': 1629103, 'DISPLAY_FIRST_LAST': 'Colby Jones', 'TEAM_ID': 23, 'TEAM_ABBREVIATION': 'SAC', 'POSITION': 'SG'},
-    {'PERSON_ID': 1629114, 'DISPLAY_FIRST_LAST': 'Julian Strawther', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SG'},
-    {'PERSON_ID': 1629125, 'DISPLAY_FIRST_LAST': 'Hunter Tyson', 'TEAM_ID': 7, 'TEAM_ABBREVIATION': 'DEN', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629136, 'DISPLAY_FIRST_LAST': 'Jett Howard', 'TEAM_ID': 19, 'TEAM_ABBREVIATION': 'ORL', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629147, 'DISPLAY_FIRST_LAST': 'Kris Murray', 'TEAM_ID': 22, 'TEAM_ABBREVIATION': 'POR', 'POSITION': 'PF'},
-    {'PERSON_ID': 1629158, 'DISPLAY_FIRST_LAST': 'Raymond Felton Jr.', 'TEAM_ID': 4, 'TEAM_ABBREVIATION': 'CHI', 'POSITION': 'PG'},
-    {'PERSON_ID': 1629169, 'DISPLAY_FIRST_LAST': 'Chris Livingston', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629180, 'DISPLAY_FIRST_LAST': 'Andre Jackson Jr.', 'TEAM_ID': 15, 'TEAM_ABBREVIATION': 'MIL', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629191, 'DISPLAY_FIRST_LAST': 'Jordan Walsh', 'TEAM_ID': 2, 'TEAM_ABBREVIATION': 'BOS', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629202, 'DISPLAY_FIRST_LAST': 'Olivier-Maxence Prosper', 'TEAM_ID': 6, 'TEAM_ABBREVIATION': 'DAL', 'POSITION': 'SF'},
-    {'PERSON_ID': 1629213, 'DISPLAY_FIRST_LAST': 'Seth Lundy', 'TEAM_ID': 1, 'TEAM_ABBREVIATION': 'ATL', 'POSITION': 'SF'},
 ]
 
 # Some fallback players are keyed by a curated PERSON_ID that differs from the
@@ -442,112 +894,97 @@ _FALLBACK_ESPN_ID_MAP = {
     3945274: 3945274,  # Luka Doncic
     4278039: 4594268,  # Anthony Edwards (NBA.com 4278039 -> ESPN 4594268)
     4395651: 5104157,  # Victor Wembanyama (NBA.com 4395651 -> ESPN 5104157)
-    4711294: 4711294,  # Chet Holmgren
-    4701230: 4701230,  # Paolo Banchero
-    4433249: 4433249,  # Franz Wagner
-    4278562: 4278562,  # Jalen Brunson
-    4712743: 4712743,  # Scottie Barnes
-    4432615: 4432615,  # Tyrese Haliburton
-    4595968: 4595968,  # Evan Mobley
-    4596317: 4596317,  # Cade Cunningham
+    4711294: 4433255,  # Chet Holmgren (NBA.com 4711294 -> ESPN 4433255)
+    4701230: 4432573,  # Paolo Banchero (NBA.com 4701230 -> ESPN 4432573)
+    4432188: 4701230,  # Jalen Johnson (NBA.com 4432188 -> ESPN 4701230)
+    4433249: 4566434,  # Franz Wagner (NBA.com 4433249 -> ESPN 4566434)
+    4278562: 3934672,  # Jalen Brunson (NBA.com 4278562 -> ESPN 3934672)
+    4712743: 4433134,  # Scottie Barnes (NBA.com 4712743 -> ESPN 4433134)
+    4432615: 4396993,  # Tyrese Haliburton (NBA.com 4432615 -> ESPN 4396993)
+    4595968: 4432158,  # Evan Mobley (NBA.com 4595968 -> ESPN 4432158)
+    4596317: 4432166,  # Cade Cunningham (NBA.com 4596317 -> ESPN 4432166)
     4278305: 4278305,  # Ja Morant
-    4432737: 4432737,  # Zion Williamson
+    4432737: 4395628,  # Zion Williamson (NBA.com 4432737 -> ESPN 4395628)
     4595995: 4595995,  # Jaren Jackson Jr.
     4681586: 4871144,  # Alperen Sengun
-    4712744: 4712744,  # Jalen Green
-    4712741: 4712741,  # Jabari Smith Jr.
+    4712744: 4437244,  # Jalen Green (NBA.com 4712744 -> ESPN 4437244)
+    4712741: 4432639,  # Jabari Smith Jr. (NBA.com 4712741 -> ESPN 4432639)
     1628369: 3136193,  # Devin Booker (NBA.com 1628369 -> ESPN 3136193)
     1628384: 3136195,  # Karl-Anthony Towns (NBA.com 1628384 -> ESPN 3136195)
-    1628415: 1628415,  # Anthony Davis
+    1628415: 6583,     # Anthony Davis (NBA.com 1628415 -> ESPN 6583)
     203076: 203076,    # Damian Lillard
-    202331: 202331,    # Paul George (NBA.com ID)
-    203083: 203083,    # James Harden
+    202331: 4251,      # Paul George (NBA.com 202331 -> ESPN 4251)
+    203083: 3992,      # James Harden (NBA.com 203083 -> ESPN 3992)
     203081: 203081,    # Russell Westbrook
-    202339: 202339,    # Kyrie Irving
+    202339: 6442,      # Kyrie Irving (NBA.com 202339 -> ESPN 6442)
     202684: 202684,    # Kawhi Leonard
-    202324: 202324,    # Bradley Beal
+    202324: 6580,      # Bradley Beal (NBA.com 202324 -> ESPN 6580)
     202322: 3978,      # DeMar DeRozan (NBA.com 202322 -> ESPN 3978)
-    202704: 202704,    # Klay Thompson
+    202704: 6475,      # Klay Thompson (NBA.com 202704 -> ESPN 6475)
     203460: 203460,    # Jimmy Butler
-    203484: 203484,    # Bam Adebayo
-    1627759: 1627759,  # Donovan Mitchell
-    1627832: 1627832,  # Darius Garland
+    203484: 4066261,   # Bam Adebayo (NBA.com 203484 -> ESPN 4066261)
+    1627759: 3908809,  # Donovan Mitchell (NBA.com 1627759 -> ESPN 3908809)
+    1627832: 4396907,  # Darius Garland (NBA.com 1627832 -> ESPN 4396907)
     1628387: 1628387,  # Jaylen Brown
     1628390: 1628390,  # Marcus Smart
     1628391: 1628391,  # Robert Williams III
     1628399: 1628399,  # Jrue Holiday
     1628404: 1628404,  # Domantas Sabonis
-    1628427: 1628427,  # Dejounte Murray
+    1628427: 3907497,  # Dejounte Murray (NBA.com 1628427 -> ESPN 3907497)
     1628449: 1628449,  # Myles Turner
     1628464: 1628464,  # Julius Randle
-    1628475: 1628475,  # Pascal Siakam
-    1628484: 1628484,  # OG Anunoby
-    1628494: 1628494,  # Mikal Bridges
-    1628500: 1628500,  # Tyrese Maxey
-    1628511: 1628511,  # Jalen Suggs
-    1628522: 1628522,  # Chet Holmgren (duplicate ID, but keep for mapping)
-    1628531: 1628531,  # Jalen Williams
+    1628475: 3149673,  # Pascal Siakam (NBA.com 1628475 -> ESPN 3149673)
+    1628484: 3934719,  # OG Anunoby (NBA.com 1628484 -> ESPN 3934719)
+    1628494: 3147657,  # Mikal Bridges (NBA.com 1628494 -> ESPN 3147657)
+    1628500: 4431678,  # Tyrese Maxey (NBA.com 1628500 -> ESPN 4431678)
+    1628511: 4432165,  # Jalen Suggs (NBA.com 1628511 -> ESPN 4432165)
+    1628531: 4593803,  # Jalen Williams (NBA.com 1628531 -> ESPN 4593803)
     1628542: 1628542,  # Walker Kessler
-    1628553: 1628553,  # Bennedict Mathurin
-    1628564: 1628564,  # Keegan Murray
+    4432188: 4432188,  # Jalen Johnson
+    1628553: 4683634,  # Bennedict Mathurin (NBA.com 1628553 -> ESPN 4683634)
+    1628564: 4594327,  # Keegan Murray (NBA.com 1628564 -> ESPN 4594327)
     1628575: 1628575,  # Jalen Duren
-    1628586: 1628586,  # Tari Eason
-    1628597: 1628597,  # Jabari Smith Jr. (duplicate)
+    1628586: 4433192,  # Tari Eason (NBA.com 1628586 -> ESPN 4433192)
     1628608: 1628608,  # Jeremy Sochan
-    1628619: 1628619,  # Jaden Ivey
+    1628619: 4683688,  # Jaden Ivey (NBA.com 1628619 -> ESPN 4683688)
     1628630: 1628630,  # AJ Griffin
-    1628641: 1628641,  # Mark Williams
+    1628641: 4701232,  # Mark Williams (NBA.com 1628641 -> ESPN 4701232)
     1628652: 1628652,  # Blake Wesley
     1628663: 1628663,  # Dalen Terry
     1628674: 1628674,  # Johnny Davis
-    1628685: 1628685,  # MarJon Beauchamp
+    1628685: 5105550,  # MarJon Beauchamp (NBA.com 1628685 -> ESPN 5105550)
     1628696: 1628696,  # Kennedy Chandler
     1628707: 1628707,  # Guillermo Diaz-Graham
     1628718: 1628718,  # Jalen Wilson
-    1628729: 1628729,  # Dereck Lively II
+    1628729: 4683688,  # Dereck Lively II (NBA.com 1628729 -> ESPN 4683688)
     1628740: 1628740,  # Keyonte George
     1628751: 1628751,  # Cason Wallace
-    1628762: 1628762,  # Amen Thompson
-    1628773: 1628773,  # Ausar Thompson
+    1628762: 4684740,  # Amen Thompson (NBA.com 1628762 -> ESPN 4684740)
+    1628773: 4684742,  # Ausar Thompson (NBA.com 1628773 -> ESPN 4684742)
     1628784: 1628784,  # Brandon Miller
     1628795: 1628795,  # Scoot Henderson
-        1628817: 1628817,  # Jarace Walker
-    1628828: 1628828,  # Taylor Hendricks
+    1628817: 5106060,  # Jarace Walker (NBA.com 1628817 -> ESPN 5106060)
+    1628828: 4684806,  # Taylor Hendricks (NBA.com 1628828 -> ESPN 4684806)
     1628839: 1628839,  # Nick Smith Jr.
     1628850: 1628850,  # Kobe Bufkin
-    1628861: 1628861,  # GG Jackson
+    1628861: 5105550,  # GG Jackson (NBA.com 1628861 -> ESPN 5105550)
     1628872: 1628872,  # Jordan Hawkins
-    1628883: 1628883,  # Brandin Podziemski
-    1628894: 1628894,  # Trayce Jackson-Davis
+    1628883: 4433076,  # Brandin Podziemski (NBA.com 1628883 -> ESPN 4433076)
+    1628894: 4593016,  # Trayce Jackson-Davis (NBA.com 1628894 -> ESPN 4593016)
     1628905: 1628905,  # Maxwell Lewis
-    1628916: 1628916,  # Julian Strawther
-    1628927: 1628927,  # Hunter Tyson
-    1628938: 1628938,  # Jett Howard
-    1628949: 1628949,  # Kris Murray
+    1628916: 5157066,  # Julian Strawther (NBA.com 1628916 -> ESPN 5157066)
+    1628927: 4594326,  # Hunter Tyson (NBA.com 1628927 -> ESPN 4594326)
+    1628938: 5105806,  # Jett Howard (NBA.com 1628938 -> ESPN 5105806)
+    1628949: 4594327,  # Kris Murray (NBA.com 1628949 -> ESPN 4594327)
     1628960: 1628960,  # Raymond Felton Jr.
     1628971: 1628971,  # Chris Livingston
-    1628982: 1628982,  # Andre Jackson Jr.
-    1628993: 1628993,  # Jordan Walsh
-    1629004: 1629004,  # Olivier-Maxence Prosper
+    1628982: 4431772,  # Andre Jackson Jr. (NBA.com 1628982 -> ESPN 4431772)
+    1628993: 4683689,  # Jordan Walsh (NBA.com 1628993 -> ESPN 4683689)
+    1629004: 4595400,  # Olivier-Maxence Prosper (NBA.com 1629004 -> ESPN 4595400)
     1629015: 1629015,  # Seth Lundy
-    1629026: 1629026,  # Keyonte George (duplicate)
-    1629037: 1629037,  # Brice Sensabaugh
-    1629048: 1629048,  # Brandin Podziemski (duplicate)
-    1629059: 1629059,  # Trayce Jackson-Davis (duplicate)
-    1629070: 1629070,  # Kobe Bufkin (duplicate)
-    1629081: 1629081,  # Jalen Hood-Schifino
-    1629092: 1629092,  # Maxwell Lewis (duplicate)
-    1629103: 1629103,  # Colby Jones
-    1629114: 1629114,  # Julian Strawther (duplicate)
-    1629125: 1629125,  # Hunter Tyson (duplicate)
-    1629136: 1629136,  # Jett Howard (duplicate)
-    1629147: 1629147,  # Kris Murray (duplicate)
-    1629158: 1629158,  # Raymond Felton Jr. (duplicate)
-    1629169: 1629169,  # Chris Livingston (duplicate)
-    1629180: 1629180,  # Andre Jackson Jr. (duplicate)
-    1629191: 1629191,  # Jordan Walsh (duplicate)
-    1629202: 1629202,  # Olivier-Maxence Prosper (duplicate)
-    1629213: 1629213,  # Seth Lundy (duplicate)
+    1629037: 4432847,  # Brice Sensabaugh (NBA.com 1629037 -> ESPN 4432847)
+    1629081: 4432819,  # Jalen Hood-Schifino (NBA.com 1629081 -> ESPN 4432819)
+    1629103: 5105854,  # Colby Jones (NBA.com 1629103 -> ESPN 5105854)
     # Additional players whose ESPN box score IDs differ from NBA.com PERSON_IDs
     203110: 6589,      # Draymond Green (NBA.com 203110 -> ESPN 6589)
     1629636: 4395651,  # Coby White (NBA.com 1629636 -> ESPN 4395651)
@@ -563,6 +1000,12 @@ _FALLBACK_ESPN_ID_MAP = {
 _ESPN_TO_CURATED_ID_MAP = {espn: curated for curated, espn in _FALLBACK_ESPN_ID_MAP.items()}
 # Also add Wembanyama's second ID (1628806) which is used in some ESPN endpoints
 _ESPN_TO_CURATED_ID_MAP[1628806] = 4395651
+
+# Set of all curated PERSON_IDs - used to detect collisions when an ESPN ID
+# from a box score is not in our mapping. If the ESPN ID collides with a
+# known curated ID (like Paul Reed's ESPN ID 4278562 = Brunson's curated ID),
+# we must NOT default to using the ESPN ID as the curated ID.
+_CURATED_PERSON_IDS = set(_FALLBACK_ESPN_ID_MAP.keys())
 
 
 def _match_player_in_box(player: dict, fallback_id: int) -> bool:
@@ -1900,8 +2343,12 @@ def get_box_score(game_id: str) -> Dict[str, pd.DataFrame]:
         return {}
 
 
-def calc_fps(row: pd.Series) -> float:
-    """Calculate Fantasy Points Scored (FPS) from a stat row"""
+def calc_fps(row) -> float:
+    """Calculate Fantasy Points Scored (FPS) from a stat row (dict or pd.Series)"""
+    # Convert dict to Series if needed
+    if isinstance(row, dict):
+        row = pd.Series(row)
+
     fps = 0.0
     # Handle different column naming conventions (V2 snake_case, V3 camelCase)
     stat_map = {
@@ -2022,27 +2469,6 @@ def get_shooting_splits(row: pd.Series) -> Dict[str, str]:
 # Player Rankings
 # =====================================================================
 
-def get_box_score_cached(game_id: str) -> Dict[str, Any]:
-    """Fetch a box score once and reuse it for every player in that game.
-
-    Without this, get_player_rankings re-fetched the same box score once per
-    player per game (thousands of redundant ESPN calls), making the endpoint
-    take 60-80 seconds. This caches results in a bounded dict.
-    """
-    if not game_id:
-        return {'players': [], 'source': 'espn'}
-    key = str(game_id)
-    with _BOX_SCORE_CACHE_LOCK:
-        cached = _BOX_SCORE_CACHE.get(key)
-        if cached is not None:
-            return cached
-    box = get_espn_box_score(key)
-    with _BOX_SCORE_CACHE_LOCK:
-        if len(_BOX_SCORE_CACHE) < _BOX_SCORE_CACHE_MAX:
-            _BOX_SCORE_CACHE[key] = box
-    return box
-
-
 @lru_cache(maxsize=64)
 def get_player_rankings(period: str = 'season', season: str = '2026-27',
                         start_date: str = '', end_date: str = '') -> List[Dict]:
@@ -2073,6 +2499,9 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
             except (ValueError, TypeError):
                 cutoff_start = today - timedelta(days=30)
                 cutoff_end = today
+        elif period == '1month':
+            cutoff_start = today - timedelta(days=30)
+            cutoff_end = today
         elif period == '2weeks':
             cutoff_start = today - timedelta(days=14)
             cutoff_end = today
@@ -2129,7 +2558,20 @@ def get_player_rankings(period: str = 'season', season: str = '2026-27',
                     continue
                 seen_ids.add(pid)
                 # Map ESPN athlete ID to our curated PERSON_ID for consistent lookups
-                curated_id = _ESPN_TO_CURATED_ID_MAP.get(pid, pid)
+                # If the ESPN ID is not in our mapping, check if it collides with a known
+                # curated PERSON_ID (e.g. Paul Reed's ESPN ID 4278562 = Brunson's curated ID).
+                # In that case, we cannot safely use the ESPN ID as a curated ID, so we
+                # skip this player (they won't match any curated player anyway).
+                if pid in _ESPN_TO_CURATED_ID_MAP:
+                    curated_id = _ESPN_TO_CURATED_ID_MAP[pid]
+                elif pid in _CURATED_PERSON_IDS:
+                    # This ESPN ID collides with a curated ID but isn't mapped — skip
+                    # to avoid misattributing stats (e.g. Paul Reed -> Brunson).
+                    continue
+                else:
+                    # ESPN ID not in our mapping and doesn't collide — use as-is
+                    # (this handles players not in our fallback list)
+                    curated_id = pid
                 # Use the already-parsed stats from the cached box score
                 # p has keys like: minutes, points, rebounds, assists, steals, blocks, turnovers, etc.
                 stat_dict = {
@@ -2258,6 +2700,7 @@ def period_label(period: str, start_date: str, end_date: str) -> str:
     if period == 'custom' and start_date and end_date:
         return f"{start_date} → {end_date}"
     return {'2weeks': 'Last 2 Weeks', '1week': 'Last Week',
+            '1month': 'Last Month',
             'season': 'Whole Season'}.get(period, period)
 
 
@@ -2289,7 +2732,110 @@ def clear_cache():
         _RANKINGS_CACHE.clear()
         _RANKINGS_WARMING.clear()
         _RANKINGS_ERROR.clear()
+    # Clear new TTL caches
+    _SCOREBOARD_CACHE.clear()
+    _TOP10_CACHE.clear()
+    _BOX_SCORE_TTL_CACHE.clear()
+    _RANKINGS_TTL_CACHE.clear()
+    _BASE_DATA_CACHE.clear()
     return jsonify({'status': 'ok', 'message': 'All caches cleared'})
+
+
+@app.route('/api/refresh-status')
+def refresh_status():
+    """Get background refresh job status and cache metadata."""
+    live_state = _REFRESH_STATE['live'].copy()
+    daily_state = _REFRESH_STATE['daily'].copy()
+
+    # Convert timestamps to ISO strings for readability
+    def format_ts(ts):
+        if ts is None:
+            return None
+        try:
+            return datetime.fromtimestamp(ts, PT_ZONE).isoformat()
+        except Exception:
+            return ts
+
+    live_state['last_run'] = format_ts(live_state['last_run'])
+    live_state['next_run'] = format_ts(live_state['next_run'])
+    live_state['backoff_until'] = format_ts(live_state['backoff_until']) if live_state['backoff_until'] else None
+
+    daily_state['last_run'] = format_ts(daily_state['last_run'])
+    daily_state['next_run'] = format_ts(daily_state['next_run'])
+    daily_state['backoff_until'] = format_ts(daily_state['backoff_until']) if daily_state['backoff_until'] else None
+
+    # Cache stats
+    cache_stats = {
+        'scoreboard_entries': len(_SCOREBOARD_CACHE.get_all_keys()),
+        'top10_entries': len(_TOP10_CACHE.get_all_keys()),
+        'box_score_entries': len(_BOX_SCORE_TTL_CACHE.get_all_keys()),
+        'rankings_entries': len(_RANKINGS_TTL_CACHE.get_all_keys()),
+        'base_data_entries': len(_BASE_DATA_CACHE.get_all_keys()),
+        'player_profile_epoch': _PLAYER_PROFILE_EPOCH,
+    }
+
+    return jsonify({
+        'live': live_state,
+        'daily': daily_state,
+        'caches': cache_stats,
+        'server_time': datetime.now(PT_ZONE).isoformat(),
+    })
+
+
+@app.route('/api/refresh/live', methods=['POST'])
+def refresh_live():
+    """Manually trigger LIVE refresh job (scoreboard + box scores + top-10)."""
+    if not _should_run_job('live'):
+        return jsonify({
+            'status': 'skipped',
+            'reason': 'Job is running or in backoff',
+            'state': _REFRESH_STATE['live'],
+        }), 429
+
+    with _REFRESH_LOCK:
+        if not _should_run_job('live'):
+            return jsonify({
+                'status': 'skipped',
+                'reason': 'Job started by another request',
+                'state': _REFRESH_STATE['live'],
+            }), 429
+        _REFRESH_STATE['live']['status'] = 'running'
+
+    # Run in background thread to avoid blocking
+    threading.Thread(target=_run_live_refresh, daemon=True).start()
+
+    return jsonify({
+        'status': 'started',
+        'message': 'LIVE refresh job started in background',
+    })
+
+
+@app.route('/api/refresh/daily', methods=['POST'])
+def refresh_daily():
+    """Manually trigger DAILY refresh job (rankings + base data + 2 days box scores)."""
+    if not _should_run_job('daily'):
+        return jsonify({
+            'status': 'skipped',
+            'reason': 'Job is running or in backoff',
+            'state': _REFRESH_STATE['daily'],
+        }), 429
+
+    with _REFRESH_LOCK:
+        if not _should_run_job('daily'):
+            return jsonify({
+                'status': 'skipped',
+                'reason': 'Job started by another request',
+                'state': _REFRESH_STATE['daily'],
+            }), 429
+        _REFRESH_STATE['daily']['status'] = 'running'
+
+    # Run in background thread to avoid blocking
+    threading.Thread(target=_run_daily_refresh, daemon=True).start()
+
+    return jsonify({
+        'status': 'started',
+        'message': 'DAILY refresh job started in background',
+    })
 
 
 @app.route('/api/player-rankings')
@@ -2345,6 +2891,245 @@ def player_rankings():
 
 
 # =====================================================================
+# Buy Low / Sell High
+# =====================================================================
+
+# Separate cache for buy-low/sell-high (can share warming logic with rankings)
+_BLSH_LOCK = threading.Lock()
+_BLSH_CACHE: Dict[str, Dict] = {}
+_BLSH_WARMING: set = set()
+_BLSH_ERROR: Dict[str, str] = {}
+
+
+def _blsh_key(period: str, season: str, min_games: int, team_filter: str, min_fps: float = 10.0) -> str:
+    """Generate cache key for buy-low/sell-high."""
+    return f"{period}|{season}|{min_games}|{team_filter}|{min_fps}"
+
+
+def build_buy_low_sell_high(rankings: List[Dict], period: str, min_games: int = 3,
+                            team_filter: str = '') -> Dict:
+    """
+    Build Buy Low / Sell High lists from player rankings.
+
+    Args:
+        rankings: List of player ranking dicts from get_player_rankings()
+        period: The period used for rankings (season, 1month, 2weeks, 1week, custom)
+        min_games: Minimum games played in the period to include player
+        team_filter: Optional team abbreviation to filter by
+
+    Returns:
+        Dict with 'sell_high' and 'buy_low' lists, each containing player dicts
+        with: name, team, games, season_fps, period_fps, diff, diff_pct, trend
+    """
+    if not rankings:
+        return {'sell_high': [], 'buy_low': [], 'period': period}
+
+    # Build a lookup for season averages by player_id
+    season_by_id = {}
+    for p in rankings:
+        if p.get('player_id'):
+            season_by_id[p['player_id']] = p
+
+    # Filter by min_games and team
+    filtered = []
+    for p in rankings:
+        games = p.get('games', 0)
+        if games < min_games:
+            continue
+        team = p.get('team', '')
+        if team_filter and team != team_filter:
+            continue
+        # Need both season and period data
+        # The rankings already contain avg_fps for the requested period
+        # We need to find the season avg_fps for comparison
+        # Since rankings only has current period data, we need season rankings too
+        # For now, we'll compute from the same rankings but we'd need a separate call
+        # Actually, the user wants: period FPS avg vs whole-season FPS avg
+        # So we need both period rankings AND season rankings
+        pass
+
+    # We'll need to fetch season rankings separately
+    return {'sell_high': [], 'buy_low': [], 'period': period}
+
+
+def get_buy_low_sell_high(period: str = '1month', season: str = '2026-27',
+                          min_games: int = 3, team_filter: str = '',
+                          min_fps: float = 10.0,
+                          start_date: str = '', end_date: str = '') -> Dict:
+    """
+    Get Buy Low / Sell High data.
+
+    Compares period FPS average vs season FPS average for each player.
+
+    period: '1month', '2weeks', '1week', 'custom', or 'season'
+    min_fps: minimum season FPS to include player (default 10.0)
+    """
+    try:
+        # First get the period rankings
+        period_rankings = get_player_rankings(period, season, start_date, end_date)
+        if not period_rankings:
+            return {'sell_high': [], 'buy_low': [], 'period': period}
+
+        # Then get the season rankings for comparison
+        season_rankings = get_player_rankings('season', season, '', '')
+        if not season_rankings:
+            # If we can't get season, just return empty
+            return {'sell_high': [], 'buy_low': [], 'period': period}
+
+        # Build lookup: player_id -> season avg_fps
+        season_fps_by_id = {}
+        for p in season_rankings:
+            pid = p.get('player_id')
+            if pid:
+                season_fps_by_id[pid] = p.get('avg_fps', 0)
+
+        sell_high = []
+        buy_low = []
+
+        for p in period_rankings:
+            games = p.get('games', 0)
+            if games < min_games:
+                continue
+            team = p.get('team', '')
+            if team_filter and team != team_filter:
+                continue
+
+            player_id = p.get('player_id')
+            period_fps = p.get('avg_fps', 0)
+            season_fps = season_fps_by_id.get(player_id, 0)
+
+            if season_fps <= 0:
+                continue
+
+            # Filter out players with season FPS below minimum
+            if season_fps < min_fps:
+                continue
+
+            diff = period_fps - season_fps
+            diff_pct = (diff / season_fps) * 100
+
+            player_data = {
+                'name': p.get('name', ''),
+                'team': team,
+                'games': games,
+                'season_fps': round(season_fps, 1),
+                'period_fps': round(period_fps, 1),
+                'diff': round(diff, 1),
+                'diff_pct': round(diff_pct, 1),
+                'trend': 'up' if diff > 0 else 'down',
+                'player_id': player_id,
+            }
+
+            if diff > 0:
+                sell_high.append(player_data)
+            elif diff < 0:
+                buy_low.append(player_data)
+
+        # Sort: Sell High by diff_pct descending (biggest overperformers first)
+        # Buy Low by diff_pct ascending (biggest underperformers first = most negative)
+        sell_high.sort(key=lambda x: -x['diff_pct'])
+        buy_low.sort(key=lambda x: x['diff_pct'])
+
+        return {
+            'sell_high': sell_high,
+            'buy_low': buy_low,
+            'period': period,
+        }
+    except Exception as e:
+        print(f"Error computing buy low sell high: {e}")
+        return {'sell_high': [], 'buy_low': [], 'period': period, 'error': str(e)}
+
+
+def warm_buy_low_sell_high(period: str = '1month', season: str = '2026-27',
+                           min_games: int = 3, team_filter: str = '',
+                           min_fps: float = 10.0,
+                           start_date: str = '', end_date: str = '') -> None:
+    """Warm the buy-low/sell-high cache in background."""
+    key = _blsh_key(period, season, min_games, team_filter, min_fps)
+    with _BLSH_LOCK:
+        if key in _BLSH_WARMING:
+            return
+        _BLSH_WARMING.add(key)
+
+    try:
+        set_load_progress(10, "fetching team schedules for buy/sell")
+        result = get_buy_low_sell_high(period, season, min_games, team_filter, min_fps, start_date, end_date)
+        with _BLSH_LOCK:
+            _BLSH_CACHE[key] = result
+            _BLSH_WARMING.discard(key)
+        set_ready()
+    except Exception as e:
+        with _BLSH_LOCK:
+            _BLSH_WARMING.discard(key)
+            _BLSH_ERROR[key] = str(e)
+        set_ready()
+
+
+@app.route('/api/buy-low-sell-high')
+def buy_low_sell_high():
+    """Get Buy Low / Sell High player lists.
+
+    Compares each player's FPS average over the selected period
+    vs their whole-season FPS average.
+    """
+    period = request.args.get('period', '1month')
+    season = request.args.get('season', '2026-27')
+    min_games = request.args.get('min_games', 3, type=int)
+    team_filter = request.args.get('team', '').upper()
+    min_fps = request.args.get('min_fps', 10.0, type=float)
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+
+    key = _blsh_key(period, season, min_games, team_filter, min_fps)
+
+    # Kick off background warm if needed
+    with _BLSH_LOCK:
+        warming = key in _BLSH_WARMING
+        cached = _BLSH_CACHE.get(key)
+        err = _BLSH_ERROR.get(key)
+
+    if not warming and cached is None and err is None:
+        threading.Thread(target=warm_buy_low_sell_high,
+                         args=(period, season, min_games, team_filter, min_fps, start_date, end_date),
+                         daemon=True).start()
+        warming = True
+
+    if warming and cached is None:
+        return jsonify({
+            'period': period,
+            'period_label': period_label(period, start_date, end_date),
+            'season': season,
+            'min_games': min_games,
+            'team_filter': team_filter,
+            'min_fps': min_fps,
+            'sell_high': [],
+            'buy_low': [],
+            'warming': True,
+            'error': err,
+        })
+
+    if cached is not None:
+        result = cached
+    else:
+        result = get_buy_low_sell_high(period, season, min_games, team_filter, min_fps, start_date, end_date)
+        with _BLSH_LOCK:
+            _BLSH_CACHE[key] = result
+
+    return jsonify({
+        'period': period,
+        'period_label': period_label(period, start_date, end_date),
+        'season': season,
+        'min_games': min_games,
+        'team_filter': team_filter,
+        'min_fps': min_fps,
+        'sell_high': result.get('sell_high', []),
+        'buy_low': result.get('buy_low', []),
+        'warming': False,
+        'error': result.get('error'),
+    })
+
+
+# =====================================================================
 # API Routes
 # =====================================================================
 
@@ -2370,7 +3155,6 @@ def index():
 @app.route('/player/<int:player_id>')
 def player_profile_page(player_id):
     """Render player profile page"""
-    _clear_espn_caches()
     all_players = get_all_players()
     player = next((p for p in all_players if p.get('PERSON_ID') == player_id), None)
     if not player:
@@ -2526,8 +3310,9 @@ def my_team_stats():
         if not player:
             continue
 
-        # Get gamelog to compute season stats
-        df = get_player_gamelog(pid, n_games=100)
+        # Get gamelog to compute season stats - use team-specific schedule
+        team_id = player.get('TEAM_ID')
+        df = get_player_gamelog(pid, n_games=100, team_id=team_id)
         if df.empty:
             results.append({
                 'id': pid,
@@ -2590,7 +3375,8 @@ def my_team_boxscore():
         # Get gamelog and find the specific date. Use the cached serial fetcher
         # so games aren't silently dropped on ESPN rate-limits (parallel path
         # excludes any game whose box score comes back empty).
-        df = get_player_gamelog(pid, n_games=100)
+        team_id = player.get('TEAM_ID')
+        df = get_player_gamelog(pid, n_games=100, team_id=team_id)
         if df.empty:
             results.append({
                 'id': pid,
@@ -2665,10 +3451,6 @@ def search_players():
     - limit: max results (default: 50, max: 500)
     - include_fps: if true, enrich with avg_fps from rankings cache (default: false)
     """
-    # Clear cached ESPN responses so a transient 403/rate-limit that produced
-    # an empty result doesn't poison the lookup for the rest of the session.
-    _clear_espn_caches()
-
     q = request.args.get('q', '').lower().strip()
     limit = min(request.args.get('limit', 50, type=int), 500)
     include_fps = request.args.get('include_fps', 'false').lower() == 'true'
@@ -2706,10 +3488,6 @@ def list_teams():
 def player_gamelog(player_id):
     """Get player game log with FPS and Usage%"""
     n = request.args.get('n', 30, type=int)
-
-    # Clear cached ESPN responses so a transient 403/rate-limit that produced
-    # an empty result doesn't poison the lookup for the rest of the session.
-    _clear_espn_caches()
 
     # Get player's team for team-specific schedule
     all_players = get_all_players()
@@ -2782,8 +3560,6 @@ def league_team_stats():
 @app.route('/api/player/<int:player_id>')
 def player_profile(player_id):
     """Get comprehensive player profile: personal info, career stats, team info"""
-    # Clear ESPN caches to ensure latest fallback data is used
-    _clear_espn_caches()
     # Find player in our player list
     all_players = get_all_players()
     print(f"DEBUG API: Found {len(all_players)} players", file=sys.stderr)
@@ -2798,7 +3574,8 @@ def player_profile(player_id):
 
     # Get player gamelog for this season
     n = request.args.get('n', 82, type=int)
-    df = get_player_gamelog(player_id, n_games=n)
+    team_id = player.get('TEAM_ID')
+    df = get_player_gamelog(player_id, n_games=n, team_id=team_id)
 
     games_played = 0
     total_fps = 0.0
@@ -3285,13 +4062,82 @@ def player_date_range_stats(player_id):
 
 @app.route('/api/boxscore/<game_id>')
 def box_score(game_id):
-    """Get detailed box score for a game"""
+    """Get detailed box score for a game - serves from TTL cache."""
     # Accept both 9-digit ESPN IDs and 10-digit NBA.com IDs
     # Convert to ESPN ID for internal use
     if len(game_id) == 10:
         espn_id = nba_to_espn_id(game_id)
     else:
         espn_id = game_id
+
+    # Try to get from TTL cache first
+    cache_key = f"box_{espn_id}"
+    box_data, is_stale, fetched_at, expires_at, is_final = _BOX_SCORE_TTL_CACHE.get(cache_key, stale_ok=True)
+
+    if box_data is not None:
+        # Convert cached format to the expected merged format
+        if 'players' in box_data:
+            players = box_data['players']
+        else:
+            # Fallback to old format if needed
+            players = box_data.get('traditional', pd.DataFrame()).to_dict('records') if hasattr(box_data.get('traditional'), 'to_dict') else []
+
+        players_data = []
+        for player in players:
+            fps = calc_fps(player)
+            usage = calc_usage_pct(player)
+            splits = get_shooting_splits(player)
+            players_data.append({
+                'player_id': player.get('playerId', player.get('personId', '')),
+                'name': player.get('playerName', ''),
+                'team': player.get('team', ''),
+                'position': player.get('position', ''),
+                'starter': player.get('starter', False),
+                'min': player.get('minutes', player.get('MIN', 0)),
+                'pts': player.get('pts', player.get('points', 0)),
+                'reb': player.get('reb', player.get('reboundsTotal', player.get('rebounds', 0))),
+                'ast': player.get('ast', player.get('assists', 0)),
+                'stl': player.get('stl', player.get('steals', 0)),
+                'blk': player.get('blk', player.get('blocks', 0)),
+                'tov': player.get('tov', player.get('turnovers', 0)),
+                'fgm': player.get('fieldGoalsMade', player.get('FGM', 0)),
+                'fga': player.get('fieldGoalsAttempted', player.get('FGA', 0)),
+                'fg3m': player.get('threePointersMade', player.get('FG3M', 0)),
+                'fg3a': player.get('threePointersAttempted', player.get('FG3A', 0)),
+                'ftm': player.get('freeThrowsMade', player.get('FTM', 0)),
+                'fta': player.get('freeThrowsAttempted', player.get('FTA', 0)),
+                'fps': round(fps, 1),
+                'usage_pct': round(usage, 1),
+                'splits': splits,
+                'plus_minus': player.get('plusMinusPoints', player.get('plusMinus', player.get('PLUS_MINUS', 0))),
+            })
+
+        cleaned_players = []
+        for p in players_data:
+            cleaned = {k: (None if isinstance(v, float) and (v != v) else v) for k, v in p.items()}
+            cleaned_players.append(cleaned)
+
+        game_date = box_data.get('game_date')
+        if game_date:
+            try:
+                from datetime import datetime, timedelta
+                dt = datetime.fromisoformat(game_date.replace('Z', '+00:00'))
+                dt = dt + timedelta(hours=1)
+                game_date = dt.isoformat().replace('+00:00', 'Z')
+            except Exception:
+                pass
+
+        return jsonify({
+            'game_id': game_id,
+            'players': cleaned_players,
+            'game_date': game_date,
+            'generated_at': fetched_at,
+            'expires_at': expires_at,
+            'is_final': is_final,
+            'stale': is_stale,
+        })
+
+    # Cache miss - fetch live
     data = get_box_score(espn_id)
     if not data:
         return jsonify({'error': 'Game not found'}), 404
@@ -3340,7 +4186,6 @@ def box_score(game_id):
             'plus_minus': row.get('plusMinusPoints', row.get('plusMinus', row.get('PLUS_MINUS', 0))),
         })
 
-    # Replace NaN with null for JSON compatibility
     cleaned_players = []
     for p in players_data:
         cleaned = {k: (None if isinstance(v, float) and (v != v) else v) for k, v in p.items()}
@@ -3349,7 +4194,7 @@ def box_score(game_id):
     # Get game date from the box score data
     espn_data = get_espn_box_score(espn_id)
     game_date = espn_data.get('game_date')
-    # Shift game date/time 1 hour later if present (ESPN appears to return times 1 hour early)
+    is_final_game = _is_game_final(espn_data.get('game_status', ''))
     if game_date:
         try:
             from datetime import datetime, timedelta
@@ -3359,7 +4204,23 @@ def box_score(game_id):
         except Exception:
             pass
 
-    return jsonify({'game_id': game_id, 'players': cleaned_players, 'game_date': game_date})
+    # Cache the result
+    ttl = None if is_final_game else 900
+    _BOX_SCORE_TTL_CACHE.set(cache_key, {
+        'players': players_data,
+        'game_date': game_date,
+        'game_status': espn_data.get('game_status', ''),
+    }, ttl=ttl, is_final=is_final_game)
+
+    return jsonify({
+        'game_id': game_id,
+        'players': cleaned_players,
+        'game_date': game_date,
+        'generated_at': time.time(),
+        'expires_at': None if is_final_game else time.time() + 900,
+        'is_final': is_final_game,
+        'stale': False,
+    })
 
 
 def _build_scoreboard_from_schedules(date_str: str) -> Dict:
@@ -3448,35 +4309,43 @@ def _build_scoreboard_from_schedules(date_str: str) -> Dict:
 
 @app.route('/api/scoreboard')
 def scoreboard():
-    """Get today's games - uses ESPN public API with retry on 403/429.
-
-    Falls back to building scoreboard from team schedules if the direct
-    scoreboard endpoint is blocked.
-    """
+    """Get today's games - serves from cache (refreshed by LIVE job every 15 min)."""
     date_str = request.args.get('date', get_effective_date_pct())
-    # ESPN expects YYYYMMDD format (no dashes)
-    espn_date = date_str.replace('-', '')
 
-    # stats.nba.com consistently times out on Render/cloud infrastructure.
-    # Use ESPN public API as primary source - it's fast, reliable, and no auth needed.
+    # Try to get from cache
+    cache_key = f"scoreboard_{date_str}"
+    data, is_stale, fetched_at, expires_at, is_final = _SCOREBOARD_CACHE.get(cache_key, stale_ok=True)
+
+    if data is not None:
+        # Serve from cache with metadata
+        next_refresh = _REFRESH_STATE['live']['next_run']
+        return jsonify({
+            'date': date_str,
+            'games': data.get('games', []),
+            'source': data.get('source', 'espn'),
+            'generated_at': fetched_at,
+            'next_refresh_at': next_refresh,
+            'stale': is_stale,
+        })
+
+    # Cache miss - fetch live (should be rare, only on first request after deploy)
+    # This path exists for robustness; normally the LIVE job keeps cache warm
+    espn_date = date_str.replace('-', '')
     espn_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
 
-    # Try ESPN scoreboard with retries
     for attempt in range(3):
         try:
             import requests
             resp = requests.get(espn_url, headers=ESPN_HEADERS, timeout=10)
 
-            # Raise on 403/429 so we can retry
             if resp.status_code in (403, 429):
                 raise RuntimeError(f"ESPN scoreboard HTTP {resp.status_code}")
 
             resp.raise_for_status()
-            data = resp.json()
+            espn_data = resp.json()
 
-            # Transform ESPN structure to our expected format
             games = []
-            for event in data.get('events', []):
+            for event in espn_data.get('events', []):
                 competition = event['competitions'][0]
                 home = competition['competitors'][0]
                 away = competition['competitors'][1]
@@ -3503,15 +4372,24 @@ def scoreboard():
                     },
                     'gameStatus': event['status']['type']['description'],
                     'gameStatusText': event['status']['type'].get('detail', ''),
-                    # Shift game time 1 hour later (ESPN appears to return times 1 hour early)
                     'gameEt': (lambda d: (lambda dt: dt.isoformat().replace('+00:00', 'Z') if dt else d)(datetime.fromisoformat(d.replace('Z', '+00:00')) + timedelta(hours=1)) if d else d)(event.get('date', '')),
-                    'period': event['status'].get('period', 0),
                     'period': event['status'].get('period', 0),
                     'gameCode': event.get('shortName', ''),
                 })
-            return jsonify({'date': date_str, 'games': games, 'source': 'espn'})
+
+            result = {'date': date_str, 'games': games, 'source': 'espn'}
+            # Cache for 15 min
+            _SCOREBOARD_CACHE.set(cache_key, result, ttl=900)
+            next_refresh = _REFRESH_STATE['live']['next_run']
+            return jsonify({
+                'date': date_str,
+                'games': games,
+                'source': 'espn',
+                'generated_at': time.time(),
+                'next_refresh_at': next_refresh,
+                'stale': False,
+            })
         except RuntimeError as e:
-            # Rate limit - retry with backoff
             if attempt < 2:
                 time.sleep(0.5 * (attempt + 1) + random.uniform(0, 0.2))
                 continue
@@ -3527,7 +4405,16 @@ def scoreboard():
     try:
         fallback_data = _build_scoreboard_from_schedules(date_str)
         if fallback_data['games']:
-            return jsonify(fallback_data)
+            _SCOREBOARD_CACHE.set(cache_key, fallback_data, ttl=900)
+            next_refresh = _REFRESH_STATE['live']['next_run']
+            return jsonify({
+                'date': date_str,
+                'games': fallback_data['games'],
+                'source': 'espn-schedules',
+                'generated_at': time.time(),
+                'next_refresh_at': next_refresh,
+                'stale': False,
+            })
     except Exception as fe:
         print(f"Schedule fallback also failed: {fe}")
 
@@ -3535,7 +4422,107 @@ def scoreboard():
         'error': 'Failed to fetch scoreboard from ESPN',
         'espn_error': 'Rate limited or unavailable after retries',
         'date': date_str,
-        'games': []
+        'games': [],
+        'generated_at': time.time(),
+        'next_refresh_at': _REFRESH_STATE['live']['next_run'],
+        'stale': True,
+    })
+
+
+@app.route('/api/daily-top10')
+def daily_top10():
+    """Get top 10 fantasy performers - serves from cache (refreshed by LIVE job every 15 min)."""
+    date_str = request.args.get('date', get_effective_date_pct())
+
+    # Try to get from cache
+    cache_key = f"top10_{date_str}"
+    data, is_stale, fetched_at, expires_at, is_final = _TOP10_CACHE.get(cache_key, stale_ok=True)
+
+    if data is not None:
+        next_refresh = _REFRESH_STATE['live']['next_run']
+        return jsonify({
+            'date': date_str,
+            'top10': data.get('top10', []),
+            'games': data.get('games', 0),
+            'generated_at': fetched_at,
+            'next_refresh_at': next_refresh,
+            'stale': is_stale,
+        })
+
+    # Cache miss - fetch live (should be rare, only on first request after deploy)
+    espn_date = date_str.replace('-', '')
+    scoreboard_url = f"https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}"
+
+    try:
+        import requests
+        resp = requests.get(scoreboard_url, headers=ESPN_HEADERS, timeout=10)
+        if resp.status_code in (403, 429):
+            raise RuntimeError(f"ESPN scoreboard HTTP {resp.status_code}")
+        resp.raise_for_status()
+        scoreboard_data = resp.json()
+    except Exception as e:
+        print(f"Error fetching scoreboard for daily top10: {e}")
+        return jsonify({'date': date_str, 'top10': [], 'error': str(e), 'generated_at': time.time(), 'stale': True})
+
+    game_ids = []
+    for event in scoreboard_data.get('events', []):
+        game_ids.append(event.get('id'))
+
+    if not game_ids:
+        return jsonify({'date': date_str, 'top10': [], 'games': 0, 'generated_at': time.time(), 'stale': False})
+
+    all_players = []
+    successful_games = 0
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {}
+        for game_id in game_ids:
+            futures[executor.submit(_fetch_box_score_with_retry, game_id)] = game_id
+
+        for future in as_completed(futures):
+            game_id = futures[future]
+            try:
+                box_data = future.result()
+                if box_data and box_data.get('players'):
+                    _BOX_SCORE_TTL_CACHE.set(f"box_{game_id}", box_data, ttl=900, is_final=_is_game_final(box_data.get('game_status', '')))
+                    for player in box_data['players']:
+                        fps = calc_fps(player)
+                        usage = calc_usage_pct(player)
+                        min_played = player.get('minutes', player.get('MIN', 0))
+                        if min_played and min_played > 0:
+                            all_players.append({
+                                'player_id': player.get('playerId', ''),
+                                'name': player.get('playerName', ''),
+                                'team': player.get('team', ''),
+                                'position': player.get('position', ''),
+                                'min': min_played,
+                                'pts': player.get('pts', player.get('points', 0)),
+                                'reb': player.get('reb', player.get('rebounds', player.get('reboundsTotal', 0))),
+                                'ast': player.get('ast', player.get('assists', 0)),
+                                'stl': player.get('stl', player.get('steals', 0)),
+                                'blk': player.get('blk', player.get('blocks', 0)),
+                                'tov': player.get('tov', player.get('turnovers', 0)),
+                                'fps': round(fps, 1),
+                                'usage_pct': round(usage, 1),
+                            })
+                    successful_games += 1
+            except Exception as e:
+                print(f"Error fetching box score for game {game_id}: {e}")
+                continue
+
+    all_players.sort(key=lambda x: x['fps'], reverse=True)
+    top10 = all_players[:10]
+
+    # Cache for 15 min
+    _TOP10_CACHE.set(cache_key, {'top10': top10, 'games': successful_games}, ttl=900)
+    next_refresh = _REFRESH_STATE['live']['next_run']
+    return jsonify({
+        'date': date_str,
+        'top10': top10,
+        'games': successful_games,
+        'generated_at': time.time(),
+        'next_refresh_at': next_refresh,
+        'stale': False,
     })
 
 
@@ -3625,10 +4612,6 @@ def start_sit():
 
     if not player_a_name or not player_b_name:
         return jsonify({'error': 'Both player names required'}), 400
-
-    # Clear cached ESPN responses so a transient 403/rate-limit that produced
-    # an empty result doesn't poison the lookup for the rest of the session.
-    _clear_espn_caches()
 
     pid_a = get_player_id(player_a_name)
     pid_b = get_player_id(player_b_name)
